@@ -235,7 +235,7 @@ class ClickHouseTools(ClickHouseCreateTableTools):
 
             for i in meta:
                 if i['type'] in ['DateTime', 'Nullable(DateTime)']:
-                    df[i['name']] = pd.to_datetime(df[i['name']])
+                    df[i['name']] = pd.to_datetime(df[i['name']], errors='ignore')
             ret_value = df
         return ret_value
 
@@ -444,5 +444,5 @@ if __name__ == '__main__':
         **{'host': '47.104.186.157', 'port': 8123, 'user': 'default', 'password': 'Imsn0wfree',
            'database': 'EDGAR_LOG'})
     df1 = node.tables
-    dff = node.query("show databases")
+    dff = node.query("select * from system.parts")
     pass
