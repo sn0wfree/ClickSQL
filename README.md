@@ -1,7 +1,23 @@
-# ClickSQL
+# ClickSQL: ClickHouse client for Humans 
  
-ClickSQL is a smart client for clickhouse database, which may help clickhouse users to use clickhouse more easier and smoother. 
-it aim to make the clickhouse to be the good alternative Relational Database of MySQL. 
 
-more information for clickhouse can be found at [here](http://clickhouse.tech)
+ 
+Package information:
+
+Records is a very simple, but powerful, library for making raw SQL queries to most relational databases.
+ 
+ClickSQL is a smart client for ClickHouse database, which may help users to use ClickHouse more easier and smoother. 
+
+
+more information for ClickHouse can be found at [here](http://clickhouse.tech)
+
+
+
+## Installation
+
+`pip install ClickSQL`
+
+## Usage
+
+````
 

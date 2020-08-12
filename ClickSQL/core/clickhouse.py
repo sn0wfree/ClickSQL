@@ -177,6 +177,11 @@ class ClickHouseCreateTableTools(object):
         query_func(base)
         return exist_status
 
+    @classmethod
+    def _check_table_exists(cls, obj, db, table):
+        ## todo check the table exists
+        pass
+
 
 class ClickHouseTools(ClickHouseCreateTableTools):
 
