@@ -15,7 +15,7 @@ def _parse_rfc1738_args(name):
     pattern = re.compile(r'''
             (?P<name>[\w\+]+)://
             (?:
-                (?P<username>[^:/]*)
+                (?P<user>[^:/]*)
                 (?::(?P<password>.*))?
             @)?
             (?:
@@ -35,8 +35,8 @@ def _parse_rfc1738_args(name):
             tokens = components['database'].split('?', 2)
             components['database'] = tokens[0]
 
-        if components['username'] is not None:
-            components['username'] = _rfc_1738_unquote(components['username'])
+        if components['user'] is not None:
+            components['user'] = _rfc_1738_unquote(components['user'])
 
         if components['password'] is not None:
             components['password'] = _rfc_1738_unquote(components['password'])
@@ -44,7 +44,9 @@ def _parse_rfc1738_args(name):
         ipv4host = components.pop('ipv4host')
         ipv6host = components.pop('ipv6host')
         components['host'] = ipv4host or ipv6host
+
         components['port'] = int(components['port'])
+
         return components
     else:
         raise ArgumentError(

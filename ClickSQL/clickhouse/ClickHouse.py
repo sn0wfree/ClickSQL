@@ -2,7 +2,6 @@
 import asyncio
 import gzip
 import json
-import re
 from collections import namedtuple
 from urllib import parse
 
@@ -12,214 +11,27 @@ import requests
 from aiohttp import ClientSession
 
 nest_asyncio.apply()
-node = namedtuple('clickhouse', ['host', 'port', 'user', 'password', 'database'])
+
+node_parameters = ['host', 'port', 'user', 'password', 'database']
+node = namedtuple('clickhouse', node_parameters)
 available_queries_select = ('select', 'show', 'desc')
 available_queries_insert = ('insert', 'optimize', 'create')
 
 SEMAPHORE = 10
 
-
-class ClickHouseCreateTableTools(object):
-    @classmethod
-    def _create_table_sql(cls, db: str, table: str, dtypes_dict: dict,
-                          order_by_key_cols: (list, tuple),
-                          primary_key_cols=None, sample_expr=None,
-                          engine_type: str = 'ReplacingMergeTree', partitions_expr=None,
-                          settings="SETTINGS index_granularity = 8192", other=''):
-        """
-
-        :param db:
-        :param table:
-        :param dtypes_dict:
-        :param order_by_key_cols:
-        :param primary_key_cols:
-        :param sample_expr:
-        :param engine_type:
-        :param partitions_expr:
-        :param settings:
-        :param other:
-        :return:
-        """
-        """CREATE TABLE [IF NOT EXISTS] [db.]table_name [ON CLUSTER cluster]
-                   (
-                       name1 [type1] [DEFAULT|MATERIALIZED|ALIAS expr1],
-                       name2 [type2] [DEFAULT|MATERIALIZED|ALIAS expr2],
-                       ...
-                   ) ENGINE = ReplacingMergeTree([ver])
-                   [PARTITION BY expr]
-                   [ORDER BY expr]
-                   [PRIMARY KEY expr]
-                   [SAMPLE BY expr]
-                   [SETTINGS name=value, ...]"""
-
-        cols_def = ','.join([f"{name} {d_type}" for name, d_type in dtypes_dict.items()])
-
-        maid_body = f"CREATE TABLE IF NOT EXISTS {db}.{table} ( {cols_def} ) ENGINE = {engine_type}"
-
-        ORDER_BY_CLAUSE = f"ORDER BY ( {','.join(order_by_key_cols)} )"
-
-        if partitions_expr is None:
-            PARTITION_by_CLAUSE = ''
-        else:
-            PARTITION_by_CLAUSE = f"PARTITION BY {partitions_expr}"
-
-        if primary_key_cols is None:
-            PRIMARY_BY_CLAUSE = ''
-        else:
-            primary_key_expr = ','.join(primary_key_cols)
-            PRIMARY_BY_CLAUSE = f"PARTITION BY ({primary_key_expr})"
-
-        if sample_expr is None:
-            SAMPLE_CLAUSE = ''
-        else:
-            SAMPLE_CLAUSE = sample_expr
-
-        base = f"{maid_body} {PARTITION_by_CLAUSE} {ORDER_BY_CLAUSE} {PRIMARY_BY_CLAUSE} {SAMPLE_CLAUSE} {other} {settings}"
-
-        return base
-
-    @staticmethod
-    def _check_end_with_limit(string, pattern=r'[\s]+limit[\s]+[0-9]+$'):
-        m = re.findall(pattern, string)
-        if m is None or m == []:
-            return False
-        else:
-            return True
-
-    @classmethod
-    def _create_table_from_sql(cls, db: str, table: str, sql: str, key_cols: list,
-                               extra_format_dict: (dict, None) = None,
-                               primary_key_cols=None, sample_expr=None, other='',
-                               engine_type: str = 'ReplacingMergeTree',
-                               partitions_expr=None, query_func=None):
-        """
-
-        :param obj:
-        :param db:
-        :param table:
-        :param sql:
-        :param key_cols:
-        :param engine_type:
-        :param extra_format_dict:
-        :return:
-        """
-
-        if isinstance(sql, str):
-            pass
-        else:
-            raise ValueError('sql must be string')
-
-        limit_status = cls._check_end_with_limit(sql, pattern=r'[\s]+limit[\s]+[0-9]+$')
-        if limit_status:
-            describe_sql = f' describe({sql}) '
-        else:
-            describe_sql = f'describe ( {sql} limit 1)'
-
-        if query_func is None:
-            raise ValueError('query function should be set!')
-
-        dtypes_df = query_func(describe_sql)
-
-        dtypes_dict = dict(dtypes_df[['name', 'type']].drop_duplicates().values)
-        if extra_format_dict is None:
-            pass
-        else:
-            dtypes_dict.update(extra_format_dict)
-        sql = cls._create_table_sql(db, table, dtypes_dict, key_cols, engine_type=engine_type,
-                                    primary_key_cols=primary_key_cols, sample_expr=sample_expr,
-                                    partitions_expr=partitions_expr, other=other)
-
-        return sql
-
-    @staticmethod
-    def translate_dtypes1_as_dtypes2(df: pd.DataFrame, src2target={'category': 'str'}):
-        dtypes_series = df.dtypes
-        for src, dest in src2target.items():
-            if src in dtypes_series:
-                category_cols = dtypes_series[dtypes_series == src].index
-                for col in category_cols:
-                    df[col] = df[col].astype(dest)
-            else:
-                pass
-        return df
-
-    @staticmethod
-    def translate_dtypes_from_df(df: pd.DataFrame, translate_dtypes: dict = {'object': 'String',
-                                                                             'datetime64[ns]': 'Datetime'}):
-        if hasattr(df, 'dtypes'):
-            dtypes_series = df.dtypes.replace(translate_dtypes)
-            return dtypes_series.map(lambda x: str(x).capitalize()).to_dict()
-        elif hasattr(df, '_columns_') and 'type' in df._columns_ and 'name' in df._columns_:
-            dtypes_series = df.set_index('name')['type'].replace(translate_dtypes)
-            return dtypes_series.map(lambda x: str(x)).to_dict()
-        else:
-            raise ValueError(f'unknown df:{type(df)}')
-
-    @classmethod
-    def _create_table_from_df(cls, db: str, table: str, df: pd.DataFrame, key_cols: (list, tuple),
-                              engine_type: str = 'ReplacingMergeTree', extra_format_dict=None, partitions_expr=None,
-                              src2target={'category': 'str'},
-                              query_func=None
-                              ):
-
-        df = cls.translate_dtypes1_as_dtypes2(df, src2target={'category': 'str'})
-        cols = df.columns
-        dtypes_dict = cls.translate_dtypes_from_df(df)
-        if extra_format_dict is None:
-            pass
-        else:
-            dtypes_dict.update(extra_format_dict)
-        dtypes_dict = {k: v for k, v in dtypes_dict.items() if k in cols}
-        base = cls._create_table_from_sql(db, table, dtypes_dict, key_cols, engine_type=engine_type,
-                                          extra_format_dict=extra_format_dict, partitions_expr=partitions_expr)
-        exist_status = cls._check_table_exists(obj, db, table)
-
-        query_func(base)
-        return exist_status
-
-    @classmethod
-    def _check_table_exists(cls, obj, db, table):
-        ## todo check the table exists
-        pass
+from ClickSQL.conf.parse_rfc_1738_args import _parse_rfc1738_args
 
 
-class ClickHouseTools(ClickHouseCreateTableTools):
+class ParameterKeyError(Exception): pass
 
-    @classmethod
-    def _create_table_from_df(cls, obj: object, db: str, table: str, df: pd.DataFrame, key_cols: (list, tuple),
-                              engine_type: str = 'ReplacingMergeTree', extra_format_dict=None, partitions_expr=None):
-        query_func = obj.query
 
-        df = cls.translate_dtypes1_as_dtypes2(df, src2target={'category': 'str'})
-        cols = df.columns
-        dtypes_dict = cls.translate_dtypes_from_df(df)
-        if extra_format_dict is None:
-            pass
-        else:
-            dtypes_dict.update(extra_format_dict)
-        dtypes_dict = {k: v for k, v in dtypes_dict.items() if k in cols}
-        base = cls._create_table_from_sql(db, table, dtypes_dict, key_cols, engine_type=engine_type,
-                                          extra_format_dict=extra_format_dict, partitions_expr=partitions_expr)
-        exist_status = cls._check_table_exists(obj, db, table)
+class ParameterTypeError(Exception): pass
 
-        query_func(base)
-        return exist_status
 
-    @classmethod
-    def _create_table(cls, obj: object, db: str, table: str, sql: str, key_cols: list,
-                      engine_type: str = 'ReplacingMergeTree',
-                      extra_format_dict: (dict, None) = None, partitions_expr: (str, None) = None) -> object:
-        if isinstance(sql, str):
-            return cls._create_table_from_sql(obj, db, table, sql, key_cols,
-                                              engine_type=engine_type,
-                                              extra_format_dict=extra_format_dict, partitions_expr=partitions_expr)
-        elif isinstance(sql, pd.DataFrame):
-            return cls._create_table_from_df(obj, db, table, sql, key_cols,
-                                             engine_type='ReplacingMergeTree',
-                                             extra_format_dict=extra_format_dict, partitions_expr=partitions_expr)
-        else:
-            raise ValueError(f'unknown sql:{sql}')
+class DatabaseTypeError(Exception): pass
 
+
+class ClickHouseTools(object):
     @staticmethod
     def _transfer_sql_format(sql, convert_to, transfer_sql_format=True):
         if transfer_sql_format:
@@ -230,7 +42,7 @@ class ClickHouseTools(ClickHouseCreateTableTools):
             return sql
 
     @staticmethod
-    def _load_into_pd(ret_value, convert_to: str = 'dataframe'):
+    def _load_into_pd(ret_value, convert_to: str = 'dataframe', errors='ignore'):
         if convert_to.lower() == 'dataframe':
             result_dict = json.loads(ret_value, strict=False)
             meta = result_dict['meta']
@@ -240,7 +52,7 @@ class ClickHouseTools(ClickHouseCreateTableTools):
 
             for i in meta:
                 if i['type'] in ['DateTime', 'Nullable(DateTime)']:
-                    df[i['name']] = pd.to_datetime(df[i['name']], errors='ignore')
+                    df[i['name']] = pd.to_datetime(df[i['name']], errors=errors)
             ret_value = df
         return ret_value
 
@@ -270,7 +82,7 @@ class ClickHouseTools(ClickHouseCreateTableTools):
         return {k: v * 1 if isinstance(v, bool) else v for k, v in updated_settings.items()}
 
 
-class ClickhouseBaseNode(ClickHouseTools):
+class ClickHouseBaseNode(ClickHouseTools):
     accepted_formats = ['DataFrame', 'TabSeparated', 'TabSeparatedRaw', 'TabSeparatedWithNames',
                         'TabSeparatedWithNamesAndTypes', 'CSV', 'CSVWithNames', 'Values', 'Vertical', 'JSON',
                         'JSONCompact', 'JSONEachRow', 'TSKV', 'Pretty', 'PrettyCompact',
@@ -284,11 +96,11 @@ class ClickhouseBaseNode(ClickHouseTools):
         """
         :param db_settings:
         """
-
-        self._db = db_settings['database']
+        self._check_db_settings(db_settings)
 
         self._para = node(db_settings['host'], db_settings['port'], db_settings['user'],
                           db_settings['password'], db_settings['database'])
+        self._db = self._para.database
 
         self._base_url = "http://{host}:{port}/?".format(host=self._para.host, port=int(self._para.port))
 
@@ -301,12 +113,44 @@ class ClickhouseBaseNode(ClickHouseTools):
 
         self._test_connection_()
 
+    @staticmethod
+    def _check_db_settings(db_settings: dict, available_db_type=[node.__name__]):
+        """
+        it is to check db setting whether is correct!
+        :param db_settings:
+        :return:
+        """
+
+        if isinstance(db_settings, dict):
+            if db_settings['name'].lower() not in available_db_type:
+                raise DatabaseTypeError('database symbol is not accept, now only accept: {",".join(available_db_type)}')
+            missing_keys = []
+            for key in node_parameters:
+                if key not in db_settings.keys():
+                    missing_keys.append(key)
+                else:
+                    pass
+            if len(missing_keys) == 0:
+                pass
+            else:
+                raise ParameterKeyError(f"the following keys are not at settings: {','.join(missing_keys)}")
+        else:
+            raise ParameterTypeError(f'db_setting must be dict type! but get {type(db_settings)}')
+
     def _test_connection_(self):
+        """
+        is to test connection by normal way!
+        :return:
+        """
         ret_value = requests.get(self._base_url)
         print('connection test: ', ret_value.text.strip())
 
     @property
     def _connect_url(self):
+        """
+        property for base connect
+        :return:
+        """
         url_str = 'http://{user}:{passwd}@{host}:{port}'.format(user=self._para.user,
                                                                 passwd=self._para.password,
                                                                 host=self._para.host,
@@ -315,6 +159,13 @@ class ClickhouseBaseNode(ClickHouseTools):
         return url_str
 
     async def _post(self, url, sql, session):
+        """
+        the aysnc way to send post request to the server
+        :param url:
+        :param sql:
+        :param session:
+        :return:
+        """
         if self.http_settings['enable_http_compression'] == 1:
             async with session.post(url, data=gzip.compress(sql.encode()),
                                     headers={'Content-Encoding': 'gzip',
@@ -332,6 +183,15 @@ class ClickhouseBaseNode(ClickHouseTools):
 
     async def _compression_switched_request(self, query_with_format: str, convert_to: str = 'dataframe',
                                             transfer_sql_format: bool = True, sem=None):
+        """
+        the core request operator with compression switch adaptor
+
+        :param query_with_format:
+        :param convert_to:
+        :param transfer_sql_format:
+        :param sem:
+        :return:
+        """
         url = self._connect_url + '/?' + parse.urlencode(self.http_settings)
         if sem is None:
             sem = asyncio.Semaphore(SEMAPHORE)  # limit async num
@@ -354,12 +214,24 @@ class ClickhouseBaseNode(ClickHouseTools):
         return result
 
     def _load_into_pd_ext(self, sql, res, convert_to, to_df):
+        """
+        a way to parse into dataframe
+        :param sql:
+        :param res:
+        :param convert_to:
+        :param to_df:
+        :return:
+        """
         if isinstance(sql, str):
             if to_df:
                 result = self._load_into_pd(res, convert_to)
+            else:
+                result = res
         elif isinstance(sql, (list, tuple)):
             if to_df:
                 result = [self._load_into_pd(s, convert_to) for s in res]
+            else:
+                result = res
         else:
             raise ValueError('sql must be str or list or tuple')
         return result
@@ -367,7 +239,7 @@ class ClickhouseBaseNode(ClickHouseTools):
     def __execute__(self, sql: (str, list, tuple), convert_to: str = 'dataframe', transfer_sql_format: bool = True,
                     loop=None, to_df=True):
         """
-
+        the core execute function to run the whole requests and SQL or a list of SQL.
         :param sql:
         :param convert_to:
         :param transfer_sql_format:
@@ -421,33 +293,34 @@ class ClickhouseBaseNode(ClickHouseTools):
         return result
 
     def query(self, sql: str):
+        """
+        require to upgrade
+        :param sql:
+        :return:
+        """
         result = self.execute(sql, convert_to='dataframe', loop=None, )
         return result
 
 
-class ClickHouseTableNode(ClickhouseBaseNode):
-    def __init__(self, **db_settings):
+class ClickHouseTableNode(ClickHouseBaseNode):
+    def __init__(self, conn_str: str):
+        db_settings = _parse_rfc1738_args(conn_str)
         super(ClickHouseTableNode, self).__init__(**db_settings)
 
     @property
     def tables(self):
         sql = 'SHOW TABLES FROM {db}'.format(db=self._db)
-        res = self.query(sql).values.ravel().tolist()
+        res = self.execute(sql, convert_to='dataframe').values.ravel().tolist()
         return res
 
     @property
     def databases(self):
         sql = 'SHOW DATABASES'
-        res = self.query(sql).values.ravel().tolist()
+        res = self.execute(sql, convert_to='dataframe').values.ravel().tolist()
         return res
 
     pass
 
 
 if __name__ == '__main__':
-    node = ClickHouseTableNode(
-        **{'host': '47.104.186.157', 'port': 8123, 'user': 'default', 'password': 'Imsn0wfree',
-           'database': 'EDGAR_LOG'})
-    df1 = node.tables
-    dff = node.query("select * from system.parts")
     pass

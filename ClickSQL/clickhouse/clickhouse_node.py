@@ -723,6 +723,7 @@ class ClickHouseBaseNodeQuery(DBUtilsCore, SQLBuilder):
         query_with_format = 'insert into {0} format JSONEachRow \n{1}'.format('{}.{}'.format(db, table), '\n'.join(
             self._check_df_and_dump(df, describe_table)))
         self._request(query_with_format, convert_to='dataframe', todf=False, transfer_sql_format=False)
+
     @lru_cache(maxsize=100)
     def execute(self, sql: str, available_queries_select=['select', 'show', 'desc'],
                 available_queries_insert=['insert', 'optimize', 'create']):
@@ -755,6 +756,7 @@ class ClickHouseBaseNodeQuery(DBUtilsCore, SQLBuilder):
                 ','.join(available_queries_select + available_queries_insert)))
         res = self._request(sql, convert_to='dataframe', todf=todf, transfer_sql_format=transfer_sql_format)
         return res
+
     @lru_cache(maxsize=100)
     def query(self, sql: str, optimize: bool = False):
         """
@@ -837,7 +839,7 @@ class ClickHouseTableNodeSQLNode(object):
         self.table = table_name
         self.tables = self._node.tables
         self.databases = self._node.databases
-        self.query=self._node.query
+        self.query = self._node.query
 
         self._is_sql = False
         self._temp_sql = None
@@ -1001,8 +1003,6 @@ class ClickHouseTableNodeSQLNode(object):
     @table.setter
     def table(self, table_name):
         self._table_name = table_name
-
-
 
 
 class ClickHouseDBNode(LazyInit):  # lazy load to improve loading speed
