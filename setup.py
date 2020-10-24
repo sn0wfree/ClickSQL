@@ -28,7 +28,13 @@ setup(
     author=__author__,
     author_email="snowfreedom0815@gmail.com",
 
-    packages=find_packages(),
-    include_package_data=True
+    packages=find_packages(exclude=['dist', 'doc', 'ClickSQL.egg-info']),
+    include_package_data=True,
+    install_requires=['pandas>=1.0.5',
+                      'numpy>=1.18.5',
+                      'requests>=2.20.0',
+                      'aiohttp>=3.6.2',
+                      'nest-asyncio>-1.4.1'
+                      ],
 
 )
