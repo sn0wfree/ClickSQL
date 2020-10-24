@@ -10,7 +10,7 @@ import pandas as pd
 import requests
 from aiohttp import ClientSession
 
-nest_asyncio.apply()
+nest_asyncio.apply()  # allow run at jupyter and asyncio env
 
 node_parameters = ['host', 'port', 'user', 'password', 'database']
 node = namedtuple('clickhouse', node_parameters)
