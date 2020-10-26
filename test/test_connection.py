@@ -1,3 +1,4 @@
+# coding=utf-8
 import unittest
 
 from ClickSQL.clickhouse.ClickHouse import ClickHouseTableNode
@@ -6,12 +7,11 @@ from ClickSQL.conf.parse_rfc_1738_args import ArgumentError
 
 
 class MyTestConnectionCase(unittest.TestCase):
-    def test_connection_success(self):
-        conn = "clickhouse://default:Imsn0wfree@47.104.186.157:8123/system"
-        node = ClickHouseTableNode(conn)
-        df1 = node.tables
-
-        self.assertGreater(len(df1), 5)
+    # def test_connection_success(self):
+    #     node = ClickHouseTableNode(conn)
+    #     df1 = node.tables
+    #
+    #     self.assertGreater(len(df1), 5)
 
     def test_connection_settings_failure_empty(self):
         conn = ""

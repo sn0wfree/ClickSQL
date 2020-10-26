@@ -34,7 +34,7 @@ setup(
                       'numpy>=1.18.5',
                       'requests>=2.20.0',
                       'aiohttp>=3.6.2',
-                      'nest-asyncio>-1.4.1'
+                      'nest-asyncio>=1.4.1'
                       ],
 
 )

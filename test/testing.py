@@ -1,11 +1,8 @@
 # coding=utf-8
-import pandas as pd
-import numpy as np
-
-
+import unittest
+from ClickSQL import ClickHouseTableNode
 
 if __name__ == '__main__':
+    print(ClickHouseTableNode)
 
     pass
-
-
