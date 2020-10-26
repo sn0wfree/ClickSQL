@@ -114,7 +114,7 @@ class ClickHouseBaseNode(ClickHouseTools):
         self._test_connection_()
 
     @staticmethod
-    def _check_db_settings(db_settings: dict, available_db_type=[node.__name__]): # node.__name__ : clickhouse
+    def _check_db_settings(db_settings: dict, available_db_type=[node.__name__]):  # node.__name__ : clickhouse
         """
         it is to check db setting whether is correct!
         :param db_settings:
