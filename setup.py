@@ -15,9 +15,16 @@ def read_file(filename):
     return long_description
 
 
+# 获取依赖
+def read_requirements(filename):
+    return [line.strip() for line in read_file(filename).splitlines()
+            if not line.startswith('#')]
+
+
 setup(
     name="ClickSQL",
     version=__version__,
+    python_requires='>=3.7.0',  # python环境
     keywords=("ClickSQL", "Databases"),
     description="SQL programming",
     long_description=read_file('README.md'),
@@ -30,11 +37,6 @@ setup(
 
     packages=find_packages(exclude=['dist', 'doc', 'ClickSQL.egg-info']),
     include_package_data=True,
-    install_requires=['pandas>=1.0.5',
-                      'numpy>=1.18.5',
-                      'requests>=2.20.0',
-                      'aiohttp>=3.6.2',
-                      'nest-asyncio>=1.4.1'
-                      ],
+    install_requires=read_requirements('requirements.txt'),  # 指定需要安装的依赖,
 
 )
