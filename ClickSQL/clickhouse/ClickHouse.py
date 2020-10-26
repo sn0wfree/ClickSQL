@@ -107,7 +107,7 @@ class ClickHouseBaseNode(ClickHouseTools):
         self.http_settings = self._merge_settings(None, updated_settings=self._default_settings)
         self.http_settings.update({'user': self._para.user, 'password': self._para.password})
 
-        self._session = ClientSession()
+        # self._session = ClientSession()
         self.max_async_query_once = 5
         self.is_closed = False
 
@@ -270,7 +270,6 @@ class ClickHouseBaseNode(ClickHouseTools):
         :param loop:
         :return:
         """
-        ## TODO warning: Unclosed client session
 
         insert_process = list(map(lambda x: x.lower().startswith(available_queries_insert), sql))
         select_process = list(map(lambda x: x.lower().startswith(available_queries_select), sql))

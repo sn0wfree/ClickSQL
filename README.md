@@ -19,5 +19,16 @@ more information for ClickHouse can be found at [here](http://clickhouse.tech)
 
 ## Usage
 
+```python
+from ClickSQL import ClickHouseTableNode
+
+conn_str = "clickhouse://default:test121231@99.99.9.9:8123/system"
+ClickHouseTableNode(conn_str)
+
+>>> connection test:  Ok.
+
+``` 
+
+
 
 

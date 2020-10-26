@@ -1,7 +1,7 @@
 # coding=utf-8
 import pandas as pd
 import numpy as np
-
+import re
 
 class ClickHouseTableNodeExt(object):
     @classmethod
@@ -191,7 +191,7 @@ class ClickHouseTableNodeExt(object):
         dtypes_dict = {k: v for k, v in dtypes_dict.items() if k in cols}
         base = cls._create_table_from_sql(db, table, dtypes_dict, key_cols, engine_type=engine_type,
                                           extra_format_dict=extra_format_dict, partitions_expr=partitions_expr)
-        exist_status = cls._check_table_exists(obj, db, table)
+        # exist_status = cls._check_table_exists(obj, db, table)
 
         query_func(base)
         return exist_status
