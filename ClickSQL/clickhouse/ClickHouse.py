@@ -10,14 +10,14 @@ import pandas as pd
 import requests
 from aiohttp import ClientSession
 
-nest_asyncio.apply()
+nest_asyncio.apply()  # allow run at jupyter and asyncio env
 
 node_parameters = ['host', 'port', 'user', 'password', 'database']
 node = namedtuple('clickhouse', node_parameters)
 available_queries_select = ('select', 'show', 'desc')
 available_queries_insert = ('insert', 'optimize', 'create')
 
-SEMAPHORE = 10
+SEMAPHORE = 10  # control async number for whole query list
 
 from ClickSQL.conf.parse_rfc_1738_args import _parse_rfc1738_args
 
@@ -107,14 +107,14 @@ class ClickHouseBaseNode(ClickHouseTools):
         self.http_settings = self._merge_settings(None, updated_settings=self._default_settings)
         self.http_settings.update({'user': self._para.user, 'password': self._para.password})
 
-        self._session = ClientSession()
+        # self._session = ClientSession()
         self.max_async_query_once = 5
         self.is_closed = False
 
         self._test_connection_()
 
     @staticmethod
-    def _check_db_settings(db_settings: dict, available_db_type=[node.__name__]):
+    def _check_db_settings(db_settings: dict, available_db_type=[node.__name__]):  # node.__name__ : clickhouse
         """
         it is to check db setting whether is correct!
         :param db_settings:
@@ -176,7 +176,7 @@ class ClickHouseBaseNode(ClickHouseTools):
                 result = await resp.read()
 
         status = resp.status
-        reason = resp.reason
+        # reason = resp.reason
         if status != 200:
             raise ValueError(result)
         return result
@@ -270,7 +270,6 @@ class ClickHouseBaseNode(ClickHouseTools):
         :param loop:
         :return:
         """
-        ## TODO warning: Unclosed client session
 
         insert_process = list(map(lambda x: x.lower().startswith(available_queries_insert), sql))
         select_process = list(map(lambda x: x.lower().startswith(available_queries_select), sql))
@@ -292,19 +291,24 @@ class ClickHouseBaseNode(ClickHouseTools):
                                       to_df=to_df)
         return result
 
-    def query(self, sql: str):
+    def query(self, *sql: str):
         """
         require to upgrade
         :param sql:
         :return:
         """
-        result = self.execute(sql, convert_to='dataframe', loop=None, )
+        result = self.execute(*sql, convert_to='dataframe', loop=None, )
         return result
 
 
 class ClickHouseTableNode(ClickHouseBaseNode):
-    def __init__(self, conn_str: str):
-        db_settings = _parse_rfc1738_args(conn_str)
+    def __init__(self, conn_str: (str, dict)):
+        if isinstance(conn_str, str):
+            db_settings = _parse_rfc1738_args(conn_str)
+        elif isinstance(conn_str, dict):
+            db_settings = conn_str
+        else:
+            raise ParameterTypeError(f'conn_str must be str or dict but get: {type(conn_str)}')
         super(ClickHouseTableNode, self).__init__(**db_settings)
 
     @property

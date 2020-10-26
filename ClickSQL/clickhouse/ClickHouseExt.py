@@ -1,6 +1,8 @@
 # coding=utf-8
 import pandas as pd
 import numpy as np
+import re
+
 class ClickHouseTableNodeExt(object):
     @classmethod
     def _create_table(cls, obj: object, db: str, table: str, sql: str, key_cols: list,
@@ -198,7 +200,7 @@ class ClickHouseTableNodeExt(object):
     def _check_table_exists(cls, obj, db, table):
         ## todo check the table exists
         pass
+
+
 if __name__ == '__main__':
     pass
-
-
