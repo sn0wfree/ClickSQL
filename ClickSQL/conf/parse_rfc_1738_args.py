@@ -1,5 +1,6 @@
 # coding=utf-8
 import re
+from typing import Any, Union
 from urllib.parse import unquote
 
 
@@ -9,9 +10,31 @@ class ArgumentError(Exception):
     This error generally corresponds to construction time state errors.
 
     """
+    pass
 
 
-def _parse_rfc1738_args(name):
+def _rfc_1738_quote(text: str):
+    return re.sub(r'[:@/]', lambda m: "%%%X" % ord(m.group(0)), text)
+
+
+def _rfc_1738_unquote(text: str):
+    return unquote(text)
+
+
+def parse_rfc1738_args(name: str):
+    """
+    parse args and translate into dict by regex method
+    ------------
+    translate string format of
+    'clickhouse://user:password@host:port/database'
+    into
+    dict version of it
+
+
+
+    :param name: string
+    :return: dict
+    """
     pattern = re.compile(r'''
             (?P<name>[\w\+]+)://
             (?:
@@ -41,10 +64,9 @@ def _parse_rfc1738_args(name):
         if components['password'] is not None:
             components['password'] = _rfc_1738_unquote(components['password'])
 
-        ipv4host = components.pop('ipv4host')
-        ipv6host = components.pop('ipv6host')
+        ipv4host: Union[str, Any] = components.pop('ipv4host')
+        ipv6host: Union[str, Any] = components.pop('ipv6host')
         components['host'] = ipv4host or ipv6host
-
         components['port'] = int(components['port'])
 
         return components
@@ -53,21 +75,7 @@ def _parse_rfc1738_args(name):
             "Could not parse rfc1738 URL from string '%s'" % name)
 
 
-def _rfc_1738_quote(text):
-    return re.sub(r'[:@/]', lambda m: "%%%X" % ord(m.group(0)), text)
-
-
-def _rfc_1738_unquote(text):
-    return unquote(text)
-
-
-class ParseRFC1738Args(object):
-    @staticmethod
-    def parse(rfc1738_args):
-        return _parse_rfc1738_args(rfc1738_args)
-
-
 if __name__ == '__main__':
-    c = _parse_rfc1738_args("clickhouse://test:sysy@199.199.199.199:1234/drre")
+    c = parse_rfc1738_args("clickhouse://test:sysy@199.199.199.199:1234/drre")
     print(c)
     pass

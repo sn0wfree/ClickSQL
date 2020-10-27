@@ -12,7 +12,7 @@ class LazyProxy(object):
             self.__init_obj()
         return getattr(self.__dict__['_obj'], item)
 
-    def __setattr__(self, key, value):
+    def __setattr__(self, key:str, value):
         if self.__dict__['_obj'] is None:
             self.__init_obj()
         setattr(self.__dict__['_obj'], key, value)
