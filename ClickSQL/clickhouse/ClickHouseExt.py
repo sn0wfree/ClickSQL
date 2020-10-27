@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import re
 
+
 class ClickHouseTableNodeExt(object):
     @classmethod
     def _create_table(cls, obj: object, db: str, table: str, sql: str, key_cols: list,
