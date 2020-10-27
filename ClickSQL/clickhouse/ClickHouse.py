@@ -4,15 +4,15 @@ import gzip
 import json
 from collections import namedtuple
 from urllib import parse
-
+import pandas as pd
 import nest_asyncio
-
 import requests
 from aiohttp import ClientSession
+from ClickSQL.conf.parse_rfc_1738_args import parse_rfc1738_args
 
 """
 this will hold base function of clickhouse and it will apply a path of access clickhouse through clickhouse api service
-this scripts will use none of clickhouse client and only depend on aiphttp and requests to make transactions with 
+this scripts will use none of clickhouse client and only depend on requests to make transactions with 
 clickhouse-server
 
 """
@@ -26,19 +26,20 @@ available_queries_insert = ('insert', 'optimize', 'create')
 PRINT_TEST_RESULT = True
 SEMAPHORE = 10  # control async number for whole query list
 
-from ClickSQL.conf.parse_rfc_1738_args import parse_rfc1738_args
+
+class ParameterKeyError(Exception):
+    pass
 
 
-class ParameterKeyError(Exception): pass
+class ParameterTypeError(Exception):
+    pass
 
 
-class ParameterTypeError(Exception): pass
+class DatabaseTypeError(Exception):
+    pass
 
 
-class DatabaseTypeError(Exception): pass
-
-
-## TODO change to queue mode change remove aiohttp depends
+# TODO change to queue mode change remove aiohttp depends
 class ClickHouseTools(object):
     @staticmethod
     def _transfer_sql_format(sql, convert_to, transfer_sql_format=True):
@@ -68,7 +69,7 @@ class ClickHouseTools(object):
         """
 
         if convert_to.lower() == 'dataframe':
-            import pandas as pd
+
             result_dict = json.loads(ret_value, strict=False)
             meta = result_dict['meta']
             name = map(lambda x: x['name'], meta)
@@ -118,10 +119,10 @@ class ClickHouseTools(object):
 
 
 class ClickHouseBaseNode(ClickHouseTools):
-    accepted_formats = ['DataFrame', 'TabSeparated', 'TabSeparatedRaw', 'TabSeparatedWithNames',
+    accepted_formats = ('DataFrame', 'TabSeparated', 'TabSeparatedRaw', 'TabSeparatedWithNames',
                         'TabSeparatedWithNamesAndTypes', 'CSV', 'CSVWithNames', 'Values', 'Vertical', 'JSON',
                         'JSONCompact', 'JSONEachRow', 'TSKV', 'Pretty', 'PrettyCompact',
-                        'PrettyCompactMonoBlock', 'PrettyNoEscapes', 'PrettySpace', 'XML']
+                        'PrettyCompactMonoBlock', 'PrettyNoEscapes', 'PrettySpace', 'XML')
 
     _default_settings = {'enable_http_compression': 1, 'send_progress_in_http_headers': 0,
                          'log_queries': 1, 'connect_timeout': 10, 'receive_timeout': 300,
@@ -151,7 +152,7 @@ class ClickHouseBaseNode(ClickHouseTools):
         self._test_connection_(self._base_url)
 
     @staticmethod
-    def _check_db_settings(db_settings: dict, available_db_type=[node.__name__]):  # node.__name__ : clickhouse
+    def _check_db_settings(db_settings: dict, available_db_type=(node.__name__,)):  # node.__name__ : clickhouse
         """
         it is to check db setting whether is correct!
         :param db_settings:
@@ -311,7 +312,7 @@ class ClickHouseBaseNode(ClickHouseTools):
         :param loop:
         :return:
         """
-        ## TODO change to smart mode, can receive any kind sql combination and handle them
+        # TODO change to smart mode, can receive any kind sql combination and handle them
         # detect whether all query are insert process
         insert_process = list(map(lambda x: x.lower().startswith(available_queries_insert), sql))
         # detect whether all query are select process
@@ -323,7 +324,7 @@ class ClickHouseBaseNode(ClickHouseTools):
             to_df = True
             transfer_sql_format = True
         else:
-            ## TODO change to smart mode, can receive any kind sql combination and handle them
+            # TODO change to smart mode, can receive any kind sql combination and handle them
             raise ValueError(
                 'the list of queries must be same type query! currently cannot handle various kind SQL type'
                 'combination')
