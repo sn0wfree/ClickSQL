@@ -138,13 +138,12 @@ class ClickHouseBaseNode(ClickHouseTools):
         self._check_db_settings(db_settings, available_db_type=[node.__name__])
 
         self._db = db_settings['database']
+        self._para = node(db_settings['host'], db_settings['port'], db_settings['user'],
+                          db_settings['password'], db_settings['database'])  # store connection information
         self._connect_url = 'http://{user}:{passwd}@{host}:{port}'.format(user=self._para.user,
                                                                           passwd=self._para.password,
                                                                           host=self._para.host,
                                                                           port=self._para.port)
-        self._para = node(db_settings['host'], db_settings['port'], db_settings['user'],
-                          db_settings['password'], db_settings['database'])  # store connection information
-
         self.http_settings = self._merge_settings(None, updated_settings=self._default_settings,
                                                   extra_settings={'user': self._para.user,
                                                                   'password': self._para.password})
@@ -227,7 +226,7 @@ class ClickHouseBaseNode(ClickHouseTools):
             raise ValueError(result)
         return result
 
-    async def _compression_switched_request(self, query_with_format: str, convert_to: str = 'dataframe',
+    async def _compression_switched_request(self, query_with_format: (tuple, list, str), convert_to: str = 'dataframe',
                                             transfer_sql_format: bool = True, sem=None):
         """
         the core request operator with compression switch adaptor
@@ -295,21 +294,20 @@ class ClickHouseBaseNode(ClickHouseTools):
         :return:
         """
 
-        if loop is None:
-            loop = asyncio.get_event_loop()
-
         sem = asyncio.Semaphore(SEMAPHORE)  # limit async num
         resp_list = self._compression_switched_request(sql, convert_to=convert_to,
                                                        transfer_sql_format=transfer_sql_format, sem=sem)
-
+        if loop is None:
+            loop = asyncio.get_event_loop()  # init loop
         res = loop.run_until_complete(resp_list)
         result = self._load_into_pd_ext(sql, res, convert_to, to_df)
 
         return result
 
-    def execute(self, *sql, convert_to: str = 'dataframe', loop=None, ):
+    def execute(self, *sql, convert_to: str = 'dataframe', loop=None, output_df=True, ):
         """
         execute sql or multi sql
+        :param output_df:
         :param sql:
         :param convert_to:
         :param loop:
@@ -321,38 +319,48 @@ class ClickHouseBaseNode(ClickHouseTools):
         # detect whether all query are select process
         select_process = list(map(lambda x: x.lower().startswith(available_queries_select), sql))
         if all(insert_process) is True:
-            to_df = False
-            transfer_sql_format = False
+            to_df = transfer_sql_format = False
         elif all(select_process) is True:
-            to_df = True
-            transfer_sql_format = True
+            to_df = transfer_sql_format = True
         else:
             # TODO change to smart mode, can receive any kind sql combination and handle them
             raise ValueError(
                 'the list of queries must be same type query! currently cannot handle various kind SQL type'
                 'combination')
 
-        if len(sql) != 1:
-            result = self.__execute__(sql, convert_to=convert_to, transfer_sql_format=transfer_sql_format, loop=loop,
-                                      to_df=to_df)
-        else:
-            result = self.__execute__(sql[0], convert_to=convert_to, transfer_sql_format=transfer_sql_format, loop=loop,
-                                      to_df=to_df)
+        result = self.__execute__(sql, convert_to=convert_to, transfer_sql_format=transfer_sql_format, loop=loop,
+                                  to_df=to_df * output_df)
         return result
 
-    def query(self, *sql: str):
+    def query(self, *sql: str, loop=None, output_df=True):
         """
         ## TODO require to upgrade
+        :param output_df:
+        :param loop:
         :param sql:
         :return:
         """
-        result = self.execute(*sql, convert_to='dataframe', loop=None, )
-        return result
+        result = self.execute(*sql, convert_to='dataframe', loop=loop, output_df=output_df)
+        if len(sql) == 1:
+            return result[0]
+        else:
+            return result
 
 
 class ClickHouseTableNode(ClickHouseBaseNode):
-    def __init__(self, conn_str: (str, dict)):
-        if isinstance(conn_str, str):
+    def __init__(self, conn_str: (str, dict, None) = None, **kwargs):
+        """
+        add kwargs to contain db settings
+        :param conn_str:
+        :param kwargs:
+        """
+        if conn_str is None:
+            if kwargs != {}:
+                db_settings = kwargs
+                db_settings['name'] = node.__name__
+            else:
+                raise ParameterTypeError('database parameters cannot be parsed normally!')
+        elif isinstance(conn_str, str):
             db_settings = parse_rfc1738_args(conn_str)
         elif isinstance(conn_str, dict):
             db_settings = conn_str
@@ -365,12 +373,20 @@ class ClickHouseTableNode(ClickHouseBaseNode):
 
     @property
     def tables(self):
+        """
+        show tables
+        :return:
+        """
         sql = 'SHOW TABLES FROM {db}'.format(db=self._db)
         res = self.execute(sql, convert_to='dataframe').values.ravel().tolist()
         return res
 
     @property
     def databases(self):
+        """
+        show databases
+        :return:
+        """
         sql = 'SHOW DATABASES'
         res = self.execute(sql, convert_to='dataframe').values.ravel().tolist()
         return res
@@ -380,7 +396,8 @@ class ClickHouseTableNode(ClickHouseBaseNode):
 
 if __name__ == '__main__':
     conn = "clickhouse://default:Imsn0wfree@47.104.186.157:8123/system"
-    node = ClickHouseTableNode(conn)
+    paras = {'host': '47.104.186.157', 'port': 8123, 'user': 'default', 'password': 'Imsn0wfree', 'database': 'raw'}
+    node = ClickHouseTableNode(**paras)
     tables = node.query('show tables from system')
     print(tables)
     pass
