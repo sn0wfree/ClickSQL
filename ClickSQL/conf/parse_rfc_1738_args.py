@@ -67,7 +67,12 @@ def parse_rfc1738_args(name: str):
         ipv4host: Union[str, Any] = components.pop('ipv4host')
         ipv6host: Union[str, Any] = components.pop('ipv6host')
         components['host'] = ipv4host or ipv6host
-        components['port'] = int(components['port'])
+
+
+        if components['port'] is None:
+            pass
+        else:
+            components['port'] = int(components['port'])
 
         return components
     else:

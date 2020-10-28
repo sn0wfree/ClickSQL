@@ -69,13 +69,10 @@ class ClickHouseTools(object):
         """
 
         if convert_to.lower() == 'dataframe':
-
             result_dict = json.loads(ret_value, strict=False)
             meta = result_dict['meta']
             name = map(lambda x: x['name'], meta)
-            data = result_dict['data']
-            df = pd.DataFrame.from_records(data, columns=list(name))
-
+            df = pd.DataFrame.from_records(result_dict['data'], columns=list(name))
             for i in meta:
                 if i['type'] in ['DateTime', 'Nullable(DateTime)']:  # translate format
                     # process datetime format
@@ -119,26 +116,32 @@ class ClickHouseTools(object):
 
 
 class ClickHouseBaseNode(ClickHouseTools):
-    accepted_formats = ('DataFrame', 'TabSeparated', 'TabSeparatedRaw', 'TabSeparatedWithNames',
-                        'TabSeparatedWithNamesAndTypes', 'CSV', 'CSVWithNames', 'Values', 'Vertical', 'JSON',
-                        'JSONCompact', 'JSONEachRow', 'TSKV', 'Pretty', 'PrettyCompact',
-                        'PrettyCompactMonoBlock', 'PrettyNoEscapes', 'PrettySpace', 'XML')
-
     _default_settings = {'enable_http_compression': 1, 'send_progress_in_http_headers': 0,
                          'log_queries': 1, 'connect_timeout': 10, 'receive_timeout': 300,
                          'send_timeout': 300, 'output_format_json_quote_64bit_integers': 0,
                          'wait_end_of_query': 0}
 
-    __slots__ = ('_db', '_base_url', '_para', 'http_settings', 'max_async_query_once', 'is_closed')
+    __slots__ = ('_db', '_connect_url', '_para', 'http_settings')  # 'max_async_query_once', 'is_closed'
 
     def __init__(self, **db_settings):
         """
+
+        accepted_formats = ('DataFrame', 'TabSeparated', 'TabSeparatedRaw', 'TabSeparatedWithNames',
+                        'TabSeparatedWithNamesAndTypes', 'CSV', 'CSVWithNames', 'Values', 'Vertical', 'JSON',
+                        'JSONCompact', 'JSONEachRow', 'TSKV', 'Pretty', 'PrettyCompact',
+                        'PrettyCompactMonoBlock', 'PrettyNoEscapes', 'PrettySpace', 'XML')
+
+
+
         :param db_settings:
         """
         self._check_db_settings(db_settings, available_db_type=[node.__name__])
 
         self._db = db_settings['database']
-        self._base_url = "http://{host}:{port}/?".format(host=db_settings['host'], port=int(db_settings['port']))
+        self._connect_url = 'http://{user}:{passwd}@{host}:{port}'.format(user=self._para.user,
+                                                                          passwd=self._para.password,
+                                                                          host=self._para.host,
+                                                                          port=self._para.port)
         self._para = node(db_settings['host'], db_settings['port'], db_settings['user'],
                           db_settings['password'], db_settings['database'])  # store connection information
 
@@ -146,10 +149,10 @@ class ClickHouseBaseNode(ClickHouseTools):
                                                   extra_settings={'user': self._para.user,
                                                                   'password': self._para.password})
         # self._session = ClientSession() # the reason of unclose session client
-        self.max_async_query_once = 5
-        self.is_closed = False
+        # self.max_async_query_once = 5
+        # self.is_closed = False
 
-        self._test_connection_(self._base_url)
+        self._test_connection_("http://{host}:{port}/?".format(host=db_settings['host'], port=int(db_settings['port'])))
 
     @staticmethod
     def _check_db_settings(db_settings: dict, available_db_type=(node.__name__,)):  # node.__name__ : clickhouse
@@ -178,7 +181,7 @@ class ClickHouseBaseNode(ClickHouseTools):
     @staticmethod
     def _test_connection_(_base_url):
         """
-        is to test connection by normal way!
+        a function to test connection by normal way!
 
         alter function type into staticmethod
         :return:
@@ -188,18 +191,18 @@ class ClickHouseBaseNode(ClickHouseTools):
             print('connection test: ', ret_value.text.strip())
         del ret_value
 
-    @property
-    def _connect_url(self):
-        """
-        property for base connect
-        :return:
-        """
-        url_str = 'http://{user}:{passwd}@{host}:{port}'.format(user=self._para.user,
-                                                                passwd=self._para.password,
-                                                                host=self._para.host,
-                                                                port=self._para.port
-                                                                )
-        return url_str
+    # @property
+    # def _connect_url(self):
+    #     """
+    #     property for base connect
+    #     :return:
+    #     """
+    #     url_str = 'http://{user}:{passwd}@{host}:{port}'.format(user=self._para.user,
+    #                                                             passwd=self._para.password,
+    #                                                             host=self._para.host,
+    #                                                             port=self._para.port
+    #                                                             )
+    #     return url_str
 
     async def _post(self, url: str, sql: str, session):
         """
@@ -355,6 +358,9 @@ class ClickHouseTableNode(ClickHouseBaseNode):
             db_settings = conn_str
         else:
             raise ParameterTypeError(f'conn_str must be str or dict but get: {type(conn_str)}')
+
+        if db_settings['port'] is None:  # add default port for clickhouse
+            db_settings['port'] = 8123
         super(ClickHouseTableNode, self).__init__(**db_settings)
 
     @property
@@ -373,4 +379,8 @@ class ClickHouseTableNode(ClickHouseBaseNode):
 
 
 if __name__ == '__main__':
+    conn = "clickhouse://default:Imsn0wfree@47.104.186.157:8123/system"
+    node = ClickHouseTableNode(conn)
+    tables = node.query('show tables from system')
+    print(tables)
     pass
