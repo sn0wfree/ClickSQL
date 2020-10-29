@@ -118,12 +118,10 @@ class ClickHouseTools(object):
 
 
 class ClickHouseBaseNode(ClickHouseTools):
-
     _default_settings = {'enable_http_compression': 1, 'send_progress_in_http_headers': 0,
                          'log_queries': 1, 'connect_timeout': 10, 'receive_timeout': 300,
                          'send_timeout': 300, 'output_format_json_quote_64bit_integers': 0,
                          'wait_end_of_query': 0}
-
 
     __slots__ = ('_db', '_connect_url', '_para', 'http_settings')  # 'max_async_query_once', 'is_closed'
 
@@ -156,7 +154,6 @@ class ClickHouseBaseNode(ClickHouseTools):
         # self.is_closed = False
 
         self._test_connection_("http://{host}:{port}/?".format(host=db_settings['host'], port=int(db_settings['port'])))
-
 
     @staticmethod
     def _check_db_settings(db_settings: dict, available_db_type=(node.__name__,)):  # node.__name__ : clickhouse
@@ -196,8 +193,6 @@ class ClickHouseBaseNode(ClickHouseTools):
         if PRINT_TEST_RESULT:
             print('connection test: ', ret_value.text.strip())
         del ret_value
-
-
 
     async def _post(self, url: str, sql: str, session):
         """
@@ -324,7 +319,6 @@ class ClickHouseBaseNode(ClickHouseTools):
             raise ValueError(
                 'the list of queries must be same type query! currently cannot handle various kind SQL type'
                 'combination')
-
 
         result = self.__execute__(sql, convert_to=convert_to, transfer_sql_format=transfer_sql_format, loop=loop,
                                   to_df=to_df * output_df)
