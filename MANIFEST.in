@@ -1,6 +1,3 @@
--- ClickSQL
-  -- ClickSQL
-      -- __init__.py
-  -- README.md
-  -- requirements.txt
-  -- LICENSE
+include *.txt
+recursive-include examples *.txt *.py
+prune examples/sample?/build

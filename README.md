@@ -39,7 +39,7 @@ from ClickSQL import ClickHouseTableNode
 
 conn_str = {'name':'clickhouse','host':'99.99.9.9','port':8123,'user':'default',
             'password':'test121231','database':'system'}
-ct = ClickHouseTableNode(conn_str)
+ct = ClickHouseTableNode(**conn_str)
 
 >>> connection test:  Ok.
 
