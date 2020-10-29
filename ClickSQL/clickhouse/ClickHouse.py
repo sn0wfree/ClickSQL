@@ -9,6 +9,7 @@ import nest_asyncio
 import requests
 from aiohttp import ClientSession
 from ClickSQL.conf.parse_rfc_1738_args import parse_rfc1738_args
+from ClickSQL.utils.file_cache import file_cache
 
 """
 this will hold base function of clickhouse and it will apply a path of access clickhouse through clickhouse api service
@@ -332,15 +333,20 @@ class ClickHouseBaseNode(ClickHouseTools):
                                   to_df=to_df * output_df)
         return result
 
-    def query(self, *sql: str, loop=None, output_df=True):
+    def query(self, *sql: str, loop=None, output_df=True, enable_cache=True, exploit_func=True):
         """
+        add enable_cache and exploit_func
+
         ## TODO require to upgrade
+        :param exploit_func:
+        :param enable_cache:
         :param output_df:
         :param loop:
         :param sql:
         :return:
         """
-        result = self.execute(*sql, convert_to='dataframe', loop=loop, output_df=output_df)
+        func = file_cache(enable_cache=enable_cache, exploit_func=exploit_func)(self.execute)
+        result = func(*sql, convert_to='dataframe', loop=loop, output_df=output_df)
         if len(sql) == 1:
             return result[0]
         else:
@@ -395,9 +401,4 @@ class ClickHouseTableNode(ClickHouseBaseNode):
 
 
 if __name__ == '__main__':
-    conn = "clickhouse://default:Imsn0wfree@47.104.186.157:8123/system"
-    paras = {'host': '47.104.186.157', 'port': 8123, 'user': 'default', 'password': 'Imsn0wfree', 'database': 'raw'}
-    node = ClickHouseTableNode(**paras)
-    tables = node.query('show tables from system')
-    print(tables)
     pass
