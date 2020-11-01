@@ -1,42 +1,124 @@
 # coding=utf-8
-import pandas as pd
 import re
 
-class ClickHouseTableNodeExt(object):
-    @classmethod
-    def _create_table(cls, obj: object, db: str, table: str, sql: str, key_cols: list,
+import pandas as pd
+
+from ClickSQL.clickhouse.ClickHouse import ClickHouseTableNode
+
+
+class ClickHouseTableExistsError(Exception): pass
+
+
+class ClickHouseTableNodeExt(ClickHouseTableNode):
+    def __init__(self, conn_str: str):
+        super(ClickHouseTableNodeExt, self).__init__(conn_str)
+
+    def _create_table(self, db: str, table: str, sql: (str, pd.DataFrame, None), key_cols: list,
+                      primary_key_cols=None, sample_expr=None,
                       engine_type: str = 'ReplacingMergeTree',
                       extra_format_dict: (dict, None) = None, partitions_expr: (str, None) = None) -> object:
-        if isinstance(sql, str):
-            return cls._create_table_from_sql(obj, db, table, sql, key_cols,
-                                              engine_type=engine_type,
-                                              extra_format_dict=extra_format_dict, partitions_expr=partitions_expr)
+
+        if sql is None: # create table from sql
+            create_sql = self._create_table_from_sql(db, table, None, key_cols,
+                                                     primary_key_cols=primary_key_cols, sample_expr=sample_expr,
+                                                     engine_type=engine_type,
+                                                     extra_format_dict=extra_format_dict,
+                                                     partitions_expr=partitions_expr,
+                                                     )
+        elif isinstance(sql, str):
+            create_sql = self._create_table_from_sql(db, table, sql, key_cols,
+                                                     primary_key_cols=primary_key_cols, sample_expr=sample_expr,
+                                                     engine_type=engine_type,
+                                                     extra_format_dict=extra_format_dict,
+                                                     partitions_expr=partitions_expr,
+                                                     )
         elif isinstance(sql, pd.DataFrame):
-            return cls._create_table_from_df(obj, db, table, sql, key_cols,
-                                             engine_type='ReplacingMergeTree',
-                                             extra_format_dict=extra_format_dict, partitions_expr=partitions_expr)
+            create_sql = self._create_table_from_df(db, table, sql, key_cols,
+                                                    primary_key_cols=primary_key_cols, sample_expr=sample_expr,
+                                                    engine_type='ReplacingMergeTree',
+                                                    extra_format_dict=extra_format_dict,
+                                                    partitions_expr=partitions_expr)
         else:
             raise ValueError(f'unknown sql:{sql}')
 
-    @classmethod
-    def _create_table_from_df(cls, obj: object, db: str, table: str, df: pd.DataFrame, key_cols: (list, tuple),
-                              engine_type: str = 'ReplacingMergeTree', extra_format_dict=None, partitions_expr=None):
-        query_func = obj.query
+        self.query(create_sql)
 
-        df = cls.translate_dtypes1_as_dtypes2(df, src2target={'category': 'str'})
+    def _create_table_from_df(self, db: str, table: str, df: pd.DataFrame, key_cols: (list, tuple),
+                              primary_key_cols=None, sample_expr=None,
+                              engine_type: str = 'ReplacingMergeTree', extra_format_dict=None, partitions_expr=None,
+                              settings="SETTINGS index_granularity = 8192",
+                              other=''
+                              ):
+
+        df = self.translate_dtypes1_as_dtypes2(df, src2target={'category': 'str'})
         cols = df.columns
-        dtypes_dict = cls.translate_dtypes_from_df(df)
+        dtypes_dict = self.translate_dtypes_from_df(df)
         if extra_format_dict is None:
             pass
         else:
             dtypes_dict.update(extra_format_dict)
         dtypes_dict = {k: v for k, v in dtypes_dict.items() if k in cols}
-        base = cls._create_table_from_sql(db, table, dtypes_dict, key_cols, engine_type=engine_type,
-                                          extra_format_dict=extra_format_dict, partitions_expr=partitions_expr)
-        exist_status = cls._check_table_exists(obj, db, table)
+        base = self._create_table_sql(db, table, dtypes_dict, key_cols,
+                                      primary_key_cols=primary_key_cols,
+                                      sample_expr=sample_expr,
+                                      engine_type=engine_type,
+                                      partitions_expr=partitions_expr,
+                                      settings=settings,
+                                      other=other
+                                      )
+        exist_status = self._check_table_exists(db, table)
+        if exist_status:
+            raise ClickHouseTableExistsError(f'{db}.{table} is exists!')
+        # self.query(base)
+        return base
 
-        query_func(base)
-        return exist_status
+    def _create_table_from_sql(self, db: str, table: str, sql: str, key_cols: list,
+                               extra_format_dict: (dict, None) = None,
+                               primary_key_cols=None, sample_expr=None,
+                               engine_type: str = 'ReplacingMergeTree',
+                               settings="SETTINGS index_granularity = 8192",
+                               other='',
+                               partitions_expr=None):
+        """
+
+        :param obj:
+        :param db:
+        :param table:
+        :param sql:
+        :param key_cols:
+        :param engine_type:
+        :param extra_format_dict:
+        :return:
+        """
+
+        if isinstance(sql, str):
+            pass
+        else:
+            raise ValueError('sql must be string')
+
+        limit_status = self._check_end_with_limit(sql, pattern=r'[\s]+limit[\s]+[0-9]+$')
+        if limit_status:
+            describe_sql = f' describe({sql}) '
+        else:
+            describe_sql = f'describe ( {sql} limit 1)'
+
+        dtypes_df = self.query(describe_sql)
+
+        dtypes_dict = dict(dtypes_df[['name', 'type']].drop_duplicates().values)
+        if extra_format_dict is None:
+            pass
+        else:
+            dtypes_dict.update(extra_format_dict)
+        sql = self._create_table_sql(db, table, dtypes_dict, key_cols,
+                                     primary_key_cols=primary_key_cols,
+                                     sample_expr=sample_expr,
+                                     engine_type=engine_type,
+                                     partitions_expr=partitions_expr,
+                                     settings=settings,
+                                     other=other)
+
+        # self.query(sql)
+        return sql
 
     @classmethod
     def _create_table_sql(cls, db: str, table: str, dtypes_dict: dict,
@@ -104,51 +186,6 @@ class ClickHouseTableNodeExt(object):
         else:
             return True
 
-    @classmethod
-    def _create_table_from_sql(cls, db: str, table: str, sql: str, key_cols: list,
-                               extra_format_dict: (dict, None) = None,
-                               primary_key_cols=None, sample_expr=None, other='',
-                               engine_type: str = 'ReplacingMergeTree',
-                               partitions_expr=None, query_func=None):
-        """
-
-        :param obj:
-        :param db:
-        :param table:
-        :param sql:
-        :param key_cols:
-        :param engine_type:
-        :param extra_format_dict:
-        :return:
-        """
-
-        if isinstance(sql, str):
-            pass
-        else:
-            raise ValueError('sql must be string')
-
-        limit_status = cls._check_end_with_limit(sql, pattern=r'[\s]+limit[\s]+[0-9]+$')
-        if limit_status:
-            describe_sql = f' describe({sql}) '
-        else:
-            describe_sql = f'describe ( {sql} limit 1)'
-
-        if query_func is None:
-            raise ValueError('query function should be set!')
-
-        dtypes_df = query_func(describe_sql)
-
-        dtypes_dict = dict(dtypes_df[['name', 'type']].drop_duplicates().values)
-        if extra_format_dict is None:
-            pass
-        else:
-            dtypes_dict.update(extra_format_dict)
-        sql = cls._create_table_sql(db, table, dtypes_dict, key_cols, engine_type=engine_type,
-                                    primary_key_cols=primary_key_cols, sample_expr=sample_expr,
-                                    partitions_expr=partitions_expr, other=other)
-
-        return sql
-
     @staticmethod
     def translate_dtypes1_as_dtypes2(df: pd.DataFrame, src2target={'category': 'str'}):
         dtypes_series = df.dtypes
@@ -164,6 +201,7 @@ class ClickHouseTableNodeExt(object):
     @staticmethod
     def translate_dtypes_from_df(df: pd.DataFrame, translate_dtypes: dict = {'object': 'String',
                                                                              'datetime64[ns]': 'Datetime'}):
+
         if hasattr(df, 'dtypes'):
             dtypes_series = df.dtypes.replace(translate_dtypes)
             return dtypes_series.map(lambda x: str(x).capitalize()).to_dict()
@@ -173,33 +211,20 @@ class ClickHouseTableNodeExt(object):
         else:
             raise ValueError(f'unknown df:{type(df)}')
 
-    @classmethod
-    def _create_table_from_df(cls, db: str, table: str, df: pd.DataFrame, key_cols: (list, tuple),
-                              engine_type: str = 'ReplacingMergeTree', extra_format_dict=None, partitions_expr=None,
-                              src2target={'category': 'str'},
-                              query_func=None
-                              ):
-
-        df = cls.translate_dtypes1_as_dtypes2(df, src2target={'category': 'str'})
-        cols = df.columns
-        dtypes_dict = cls.translate_dtypes_from_df(df)
-        if extra_format_dict is None:
-            pass
+    def _check_table_exists(self, db, table):
+        ## TODO check the table exists
+        sql = f"show tables from {db}"
+        tables = self.query(sql).values.ravel().tolist()
+        if table in tables:
+            return True
         else:
-            dtypes_dict.update(extra_format_dict)
-        dtypes_dict = {k: v for k, v in dtypes_dict.items() if k in cols}
-        base = cls._create_table_from_sql(db, table, dtypes_dict, key_cols, engine_type=engine_type,
-                                          extra_format_dict=extra_format_dict, partitions_expr=partitions_expr)
-        exist_status = cls._check_table_exists(obj, db, table)
-
-        query_func(base)
-        return exist_status
-
-    @classmethod
-    def _check_table_exists(cls, obj, db, table):
-        ## todo check the table exists
-        pass
+            return False
 
 
 if __name__ == '__main__':
+    conn = "clickhouse://default:Imsn0wfree@47.104.186.157:8123/default"
+    CHE = ClickHouseTableNodeExt(conn)
+    dbs = CHE.query("show databases")
+    print(dbs)
+
     pass

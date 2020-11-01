@@ -19,5 +19,11 @@ more information for ClickHouse can be found at [here](http://clickhouse.tech)
 
 ## Usage
 
+## functions
+1. get data from clickhouse
+2. insert data into clickhouse
+3. create 
+4. alter
+
 
 
