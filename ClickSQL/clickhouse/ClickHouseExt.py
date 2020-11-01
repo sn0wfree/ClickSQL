@@ -3,6 +3,7 @@ import re
 
 import pandas as pd
 
+
 from ClickSQL.clickhouse.ClickHouse import ClickHouseTableNode
 
 
@@ -15,6 +16,7 @@ class ClickHouseTableNodeExt(ClickHouseTableNode):
 
     def _create_table(self, db: str, table: str, sql: (str, pd.DataFrame, None), key_cols: list,
                       primary_key_cols=None, sample_expr=None,
+
                       engine_type: str = 'ReplacingMergeTree',
                       extra_format_dict: (dict, None) = None, partitions_expr: (str, None) = None) -> object:
 
@@ -221,10 +223,12 @@ class ClickHouseTableNodeExt(ClickHouseTableNode):
             return False
 
 
-if __name__ == '__main__':
-    conn = "clickhouse://default:Imsn0wfree@47.104.186.157:8123/default"
-    CHE = ClickHouseTableNodeExt(conn)
-    dbs = CHE.query("show databases")
-    print(dbs)
 
+    @classmethod
+    def _check_table_exists(cls, obj, db, table):
+        ## todo check the table exists
+        pass
+
+
+if __name__ == '__main__':
     pass
