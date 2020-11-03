@@ -5,7 +5,7 @@ import json
 from collections import namedtuple
 from functools import partial, partialmethod
 from urllib import parse
-
+import warnings
 import nest_asyncio
 import pandas as pd
 import requests
@@ -23,30 +23,47 @@ clickhouse-server
 
 nest_asyncio.apply()  # allow run at jupyter and asyncio env
 
-node_parameters = ['host', 'port', 'user', 'password', 'database']
+node_parameters = ('host', 'port', 'user', 'password', 'database')
 node = namedtuple('clickhouse', node_parameters)
 available_queries_select = ('select', 'show', 'desc')
 available_queries_insert = ('insert', 'optimize', 'create')
-PRINT_TEST_RESULT = True
+PRINT_CHECK_RESULT = True
+GLOBAL_RAISE_ERROR = True
 SEMAPHORE = 10  # control async number for whole query list
 
 
-class ParameterKeyError(Exception):
-    pass
+class ParameterKeyError(Exception): pass
 
 
-class ParameterTypeError(Exception):
-    pass
+class ParameterTypeError(Exception): pass
 
 
-class DatabaseTypeError(Exception):
-    pass
+class DatabaseTypeError(Exception): pass
+
+
+class DatabaseError(Exception): pass
+
+
+class HeartbeatCheckFailure(Exception): pass
+
+
+# class SmartResult(object):
+#
+#     def __init__(self, result, status_code: int):
+#         self._obj = result
+#         self.status_code = status_code
+
+
+def SmartBytes(result: bytes, status_code: int):
+    result_cls = type('SmartBytes', (bytes,), {'status_code': property(lambda x: status_code)})
+
+    return result_cls(result)
 
 
 # TODO change to queue mode change remove aiohttp depends
 class ClickHouseTools(object):
     @staticmethod
-    def _transfer_sql_format(sql, convert_to, transfer_sql_format=True):
+    def _transfer_sql_format(sql: str, convert_to: str, transfer_sql_format: bool = True):
         """
         provide a method which will translate a standard sql into clickhouse sql with might use format as suffix
         :param sql:
@@ -65,7 +82,7 @@ class ClickHouseTools(object):
             return sql
 
     @staticmethod
-    def _load_into_pd(ret_value, convert_to: str = 'dataframe', errors='ignore'):
+    def _load_into_pd(ret_value: (str, bytes), convert_to: str = 'dataframe', errors='ignore'):
         """
         will provide a approach to load data from clickhouse into pd.DataFrame format which may be easy to use
 
@@ -76,7 +93,6 @@ class ClickHouseTools(object):
         """
 
         if convert_to.lower() == 'dataframe':
-
             result_dict = json.loads(ret_value, strict=False)
             meta = result_dict['meta']
             name = map(lambda x: x['name'], meta)
@@ -108,15 +124,12 @@ class ClickHouseTools(object):
             raise ParameterTypeError(f'updated_settings must be dict type, but get {type(updated_settings)}')
         else:
             pass
-
         if settings is not None and isinstance(settings, dict):
             invalid_setting_keys = set(settings.keys()) - set(updated_settings.keys())
             if len(invalid_setting_keys) > 0:
                 raise ValueError('setting "{0}" are invalid, valid settings are: {1}'.format(
                     ','.join(invalid_setting_keys), ', '.join(updated_settings.keys())))
-
             updated_settings.update(settings)
-
         if extra_settings is not None and isinstance(extra_settings, dict):
             updated_settings.update(extra_settings)
 
@@ -139,15 +152,12 @@ class ClickHouseBaseNode(ClickHouseTools):
                         'JSONCompact', 'JSONEachRow', 'TSKV', 'Pretty', 'PrettyCompact',
                         'PrettyCompactMonoBlock', 'PrettyNoEscapes', 'PrettySpace', 'XML')
 
-
-
         :param db_settings:
         """
-        self._check_db_settings(db_settings, available_db_type=[node.__name__])
-
-        self._db = db_settings['database']
+        self._check_db_settings_(db_settings, available_db_type=[node.__name__])
         self._para = node(db_settings['host'], db_settings['port'], db_settings['user'],
                           db_settings['password'], db_settings['database'])  # store connection information
+        self._db = self._para.database
         self._connect_url = 'http://{user}:{passwd}@{host}:{port}'.format(user=self._para.user,
                                                                           passwd=self._para.password,
                                                                           host=self._para.host,
@@ -155,15 +165,15 @@ class ClickHouseBaseNode(ClickHouseTools):
         self.http_settings = self._merge_settings(None, updated_settings=self._default_settings,
                                                   extra_settings={'user': self._para.user,
                                                                   'password': self._para.password})
-        # self._session = ClientSession() # the reason of unclose session client
         # self.max_async_query_once = 5
         # self.is_closed = False
-
-        self._test_connection_("http://{host}:{port}/?".format(host=db_settings['host'], port=int(db_settings['port'])))
-        self.cache_query = partialmethod(self.query, enable_cache=True)
+        _base_url = "http://{host}:{port}/?".format(host=self._para.host, port=int(self._para.port))
+        self.__heartbeat_test__(_base_url)
+        self._heartbeat_test_ = partialmethod(self.__heartbeat_test__, _base_url=_base_url)
+        self.cache_query = partialmethod(self.execute, enable_cache=True, exploit_func=True)
 
     @staticmethod
-    def _check_db_settings(db_settings: dict, available_db_type=(node.__name__,)):  # node.__name__ : clickhouse
+    def _check_db_settings_(db_settings: dict, available_db_type=(node.__name__,)):  # node.__name__ : clickhouse
         """
         it is to check db setting whether is correct!
         :param db_settings:
@@ -173,13 +183,10 @@ class ClickHouseBaseNode(ClickHouseTools):
         if isinstance(db_settings, dict):
             if db_settings['name'].lower() not in available_db_type:
                 raise DatabaseTypeError(
-                    f'database symbol is not accept, now only accept: {",".join(available_db_type)}')
-            missing_keys = [key for key in node_parameters if key not in db_settings.keys()]
-            # :
-            #     missing_keys.append(key)
-            # else:
-            #     pass
-            if len(missing_keys) == 0:
+                    f'database symbol is not accepted, now only accept: {",".join(available_db_type)}')
+
+            missing_keys = filter(lambda x: x not in db_settings.keys(), node_parameters)  # can improve
+            if len(tuple(missing_keys)) == 0:
                 pass
             else:
                 raise ParameterKeyError(f"the following keys are not at settings: {','.join(missing_keys)}")
@@ -187,8 +194,7 @@ class ClickHouseBaseNode(ClickHouseTools):
             raise ParameterTypeError(f'db_setting must be dict type! but get {type(db_settings)}')
 
     @staticmethod
-    def _test_connection_(_base_url):
-
+    def __heartbeat_test__(_base_url: str):
         """
         a function to test connection by normal way!
 
@@ -197,11 +203,14 @@ class ClickHouseBaseNode(ClickHouseTools):
         """
 
         ret_value = requests.get(_base_url)
-        if PRINT_TEST_RESULT:
+        status_code = ret_value.status_code
+        if status_code != 200:
+            raise HeartbeatCheckFailure(f'heartbeat check failure at {_base_url}')
+        if PRINT_CHECK_RESULT:
             print('connection test: ', ret_value.text.strip())
         del ret_value
 
-    async def _post(self, url: str, sql: str, session):
+    async def _post(self, url: str, sql: str, session, raise_error: bool = True):
         """
         the async way to send post request to the server
         :param url:
@@ -218,14 +227,17 @@ class ClickHouseBaseNode(ClickHouseTools):
             async with session.post(url, body=sql.encode(), ) as resp:
                 result = await resp.read()
 
-        status = resp.status
+        result = SmartBytes(result, resp.status)
         # reason = resp.reason
-        if status != 200:
-            raise ValueError(result)
+        if result.status_code != 200:
+            if raise_error and GLOBAL_RAISE_ERROR:
+                raise DatabaseError(result)
+            else:
+                warnings.warn(str(result))
         return result
 
     async def _compression_switched_request(self, query_with_format: (tuple, list, str), convert_to: str = 'dataframe',
-                                            transfer_sql_format: bool = True, sem=None):
+                                            transfer_sql_format: bool = True, sem=None, raise_error=True):
         """
         the core request operator with compression switch adaptor
 
@@ -236,7 +248,6 @@ class ClickHouseBaseNode(ClickHouseTools):
         :return:
         """
         url = self._connect_url + '/?' + parse.urlencode(self.http_settings)
-
         transfer_sql = partial(self._transfer_sql_format, convert_to=convert_to,
                                transfer_sql_format=transfer_sql_format)
         if sem is None:
@@ -244,22 +255,17 @@ class ClickHouseBaseNode(ClickHouseTools):
         async with sem:  # limit async number
             async with ClientSession() as session:
                 if isinstance(query_with_format, str):
-                    # sql2 =
-                    result = await self._post(url, transfer_sql(query_with_format), session)
+                    result = await self._post(url, transfer_sql(query_with_format), session, raise_error=raise_error)
                 elif isinstance(query_with_format, (tuple, list)):
-                    result = [await self._post(url, transfer_sql(sql), session) for sql in query_with_format]
-
-                    # # sql2 = self._transfer_sql_format(sql, convert_to=convert_to,
-                    # #                               transfer_sql_format=transfer_sql_format)
-                    # res =
-                    # result.append(res)
+                    result = [await self._post(url, transfer_sql(sql), session, raise_error=raise_error) for sql in
+                              query_with_format]
                 else:
                     raise ValueError('query_with_format must be str , list or tuple')
-
         return result
 
     @classmethod
-    def _load_into_pd_ext(cls, sql: (str, list, tuple), ret_value, convert_to: str, to_df: bool):
+    def _load_into_pd_ext(cls, sql: (str, list, tuple), ret_value: (bytes, list, tuple), convert_to: str,
+                          to_df: bool = True):
         """
         a way to parse into dataframe
         :param sql:
@@ -268,22 +274,22 @@ class ClickHouseBaseNode(ClickHouseTools):
         :param to_df:
         :return:
         """
-        if isinstance(sql, str):
-            if to_df or ret_value != b'':
+        if not to_df:
+            result = ret_value
+        elif isinstance(sql, str):
+            if ret_value != b'' and ret_value.status_code == 200:
                 result = cls._load_into_pd(ret_value, convert_to)
             else:
                 result = ret_value
         elif isinstance(sql, (list, tuple)):
-            if to_df:
-                result = [cls._load_into_pd(s, convert_to) if ret_value != b'' else None for s in ret_value]
-            else:
-                result = ret_value
+            result = [cls._load_into_pd(s, convert_to) if s != b'' and s.status_code == 200 else s for s in
+                      ret_value]
         else:
             raise ValueError(f'sql must be str or list or tuple,but get {type(sql)}')
         return result
 
     def __execute__(self, sql: (str, list, tuple), convert_to: str = 'dataframe', transfer_sql_format: bool = True,
-                    loop=None, to_df=True):
+                    loop=None, to_df: bool = True, raise_error=True):
         """
         the core execute function to run the whole requests and SQL or a list of SQL.
         :param sql:
@@ -296,18 +302,22 @@ class ClickHouseBaseNode(ClickHouseTools):
 
         sem = asyncio.Semaphore(SEMAPHORE)  # limit async num
         resp_list = self._compression_switched_request(sql, convert_to=convert_to,
-                                                       transfer_sql_format=transfer_sql_format, sem=sem)
+                                                       transfer_sql_format=transfer_sql_format, sem=sem,
+                                                       raise_error=raise_error)
         if loop is None:
             loop = asyncio.get_event_loop()  # init loop
         res = loop.run_until_complete(resp_list)
-        result = self._load_into_pd_ext(sql, res, convert_to, to_df)
-
+        result = self._load_into_pd_ext(sql, res, convert_to, to_df=to_df)
         return result
 
-    def execute(self, *sql, convert_to: str = 'dataframe', loop=None, output_df=True, ):
+    def execute(self, *sql, convert_to: str = 'dataframe', loop=None, output_df: bool = True,
+                enable_cache: bool = False, exploit_func: bool = True, raise_error: bool = True):
         """
         execute sql or multi sql
 
+        :param raise_error:
+        :param exploit_func:
+        :param enable_cache:
         :param output_df:
         :param sql:
         :param convert_to:
@@ -316,30 +326,31 @@ class ClickHouseBaseNode(ClickHouseTools):
         """
         # TODO change to smart mode, can receive any kind sql combination and handle them
         # detect whether all query are insert process
-        insert_process = list(map(lambda x: x.lower().startswith(available_queries_insert), sql))
-        # detect whether all query are select process
-        select_process = list(map(lambda x: x.lower().startswith(available_queries_select), sql))
-        if all(insert_process) is True:
-            to_df = transfer_sql_format = False
-        elif all(select_process) is True:
-            to_df = transfer_sql_format = True
-        else:
-            # TODO change to smart mode, can receive any kind sql combination and handle them
-            raise ValueError(
-                'the list of queries must be same type query! currently cannot handle various kind SQL type'
-                'combination')
-
-        result = self.__execute__(sql, convert_to=convert_to, transfer_sql_format=transfer_sql_format, loop=loop,
-                                  to_df=to_df * output_df)
+        # insert_process = map(lambda x: x.lower().startswith(available_queries_insert), sql)
+        # # detect whether all query are select process
+        # select_process = map(lambda x: x.lower().startswith(available_queries_select), sql)
+        # if all(list(select_process)) is True:
+        #     to_df = transfer_sql_format = True
+        # elif all(list(insert_process)) is True:
+        #     to_df = transfer_sql_format = False
+        # else:
+        #     # TODO change to smart mode, can receive any kind sql combination and handle them
+        #     raise ValueError(
+        #         'the list of queries must be same type query! currently cannot handle various kind SQL type'
+        #         'combination')
+        func = file_cache(enable_cache=enable_cache, exploit_func=exploit_func)(self.__execute__)
+        result = func(sql, convert_to=convert_to, transfer_sql_format=True, loop=loop,
+                      to_df=True * output_df, raise_error=raise_error)
 
         return result
 
-    def query(self, *sql: str, loop=None, output_df=True, enable_cache=False, exploit_func=True):
+    def query(self, *sql: str, loop=None, output_df: bool = True, raise_error=True):
 
         """
         add enable_cache and exploit_func
 
         ## TODO require to upgrade
+        :param raise_error:
         :param exploit_func:
         :param enable_cache:
         :param output_df:
@@ -348,12 +359,9 @@ class ClickHouseBaseNode(ClickHouseTools):
         :return:
         """
 
-        func = file_cache(enable_cache=enable_cache, exploit_func=exploit_func)(self.execute)
-        result = func(*sql, convert_to='dataframe', loop=loop, output_df=output_df)
-        if len(sql) == 1:
-            return result[0]
-        else:
-            return result
+        result = self.execute(*sql, convert_to='dataframe', loop=loop, output_df=output_df, enable_cache=False,
+                              exploit_func=False, raise_error=raise_error)
+        return result
 
 
 class ClickHouseTableNode(ClickHouseBaseNode):
