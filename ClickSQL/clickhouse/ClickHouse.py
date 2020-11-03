@@ -356,8 +356,6 @@ class ClickHouseBaseNode(ClickHouseTools):
             return result
 
 
-
-
 class ClickHouseTableNode(ClickHouseBaseNode):
 
     def __init__(self, conn_str: (str, dict, None) = None, **kwargs):
@@ -407,9 +405,4 @@ class ClickHouseTableNode(ClickHouseBaseNode):
 
 
 if __name__ == '__main__':
-    conn = "clickhouse://default:Imsn0wfree@47.104.186.157:8123/system"
-    paras = {'host': '47.104.186.157', 'port': 8123, 'user': 'default', 'password': 'Imsn0wfree', 'database': 'raw'}
-    node = ClickHouseTableNode(**paras)
-    tables = node.query('show tables from system')
-    print(tables)
     pass
