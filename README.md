@@ -72,4 +72,26 @@ sn0wfree
 4. alter
 
 
+# Plan
+## Available function 
+1. access clickhouse service
+2. execute standard SQL and transform into dataframe
+3. able to execute select query 
+4. able to execute insert query 
+5. no require clickhouse-client
+6. auto create table sql
+
+## schedule
+
+2. create a pandas_liked executable function, which can compatible with pandas 
+3. can execute explain query
+4. can execute user role query
+5. create analysis component
+6. auto report system
+7. table register system
+8. data manager system
+8. meta data manager
+9. distributed query（query+insert）
+
+
 
