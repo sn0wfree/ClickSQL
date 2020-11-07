@@ -13,6 +13,8 @@ from aiohttp import ClientSession
 
 from ClickSQL.conf.parse_rfc_1738_args import parse_rfc1738_args
 from ClickSQL.utils.file_cache import file_cache
+from ClickSQL.errors import ParameterKeyError, ParameterTypeError, DatabaseTypeError, DatabaseError, \
+    HeartbeatCheckFailure, ClickHouseTableExistsError
 
 """
 this will hold base function of clickhouse and it will apply a path of access clickhouse through clickhouse api service
@@ -32,21 +34,6 @@ GLOBAL_RAISE_ERROR = True
 SEMAPHORE = 10  # control async number for whole query list
 
 
-class ParameterKeyError(Exception): pass
-
-
-class ParameterTypeError(Exception): pass
-
-
-class DatabaseTypeError(Exception): pass
-
-
-class DatabaseError(Exception): pass
-
-
-class HeartbeatCheckFailure(Exception): pass
-
-
 # class SmartResult(object):
 #
 #     def __init__(self, result, status_code: int):
@@ -62,6 +49,16 @@ def SmartBytes(result: bytes, status_code: int):
 
 # TODO change to queue mode change remove aiohttp depends
 class ClickHouseTools(object):
+    @staticmethod
+    def _check_sql_type(sql: str):
+        if sql.lower().startswith(available_queries_select):
+            return 'select-liked'
+        elif sql.lower().startswith(available_queries_insert):
+            return 'insert-liked'
+
+        else:
+            raise ValueError('sql type cannot be supported! need upgrade!')
+
     @staticmethod
     def _transfer_sql_format(sql: str, convert_to: str, transfer_sql_format: bool = True):
         """
@@ -342,7 +339,11 @@ class ClickHouseBaseNode(ClickHouseTools):
         result = func(sql, convert_to=convert_to, transfer_sql_format=True, loop=loop,
                       to_df=True * output_df, raise_error=raise_error)
 
-        return result
+        if len(sql) == 1:
+            return result[0]
+        else:
+
+            return result
 
     def query(self, *sql: str, loop=None, output_df: bool = True, raise_error=True):
 
@@ -351,8 +352,6 @@ class ClickHouseBaseNode(ClickHouseTools):
 
         ## TODO require to upgrade
         :param raise_error:
-        :param exploit_func:
-        :param enable_cache:
         :param output_df:
         :param loop:
         :param sql:
@@ -409,7 +408,37 @@ class ClickHouseTableNode(ClickHouseBaseNode):
         res = self.execute(sql, convert_to='dataframe').values.ravel().tolist()
         return res
 
-    pass
+    def _check_exists(self, db_table: str, mode: str = 'table'):
+        """
+
+        :param db_table:
+        :param mode:
+        :return:
+        """
+        ## TODO check table exists
+        if isinstance(db_table, str):
+            if '.' in db_table:
+                db, table = db_table.split('.')
+            else:
+                db, table = self._db, db_table
+        else:
+            raise ValueError('please input correct db.table information')
+
+        print(f'will detect {db}.{table}')
+
+        if mode == 'table':
+            if db == self._db:
+                return table in self.tables
+            else:
+                sql = f"show tables from {db}"
+                tables = self.query(sql).values.ravel().tolist()
+                return table in tables
+            # else:
+            # else:
+            #     return db in self.databases
+        else:
+
+            return db in self.databases
 
 
 if __name__ == '__main__':
