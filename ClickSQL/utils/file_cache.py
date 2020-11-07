@@ -1,9 +1,10 @@
 # coding=utf-8
+import datetime
 import hashlib
+import os
+import pickle
 from collections import OrderedDict
-import os, pickle, datetime
 from functools import wraps
-from types import MethodType, FunctionType
 
 __refresh__ = False
 DEFAULT = './'
@@ -44,7 +45,6 @@ def prepare_args(func, arg, kwargs: dict, granularity: str = 'H', exploit_func_n
     dt_str = datetime.datetime.now().strftime(time_format_dimension)
     kwargs = OrderedDict(sorted(kwargs.items(), key=lambda t: t[0]))  # sort kwargs to fix hashcode if sample input
     func_name = func.__name__.__str__()
-    # qualname = func.__qualname__
     cls_obj = func.__qualname__ != func_name
     if cls_obj:
         obj = arg[0]
