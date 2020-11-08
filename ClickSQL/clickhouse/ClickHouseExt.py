@@ -1,10 +1,8 @@
 # coding=utf-8
+import pandas as pd
 import re
 
-import pandas as pd
-
 from ClickSQL.clickhouse.ClickHouse import ClickHouseTableNode
-
 from ClickSQL.errors import ClickHouseTableExistsError, ParameterTypeError
 
 
@@ -148,11 +146,39 @@ class ClickHouseTableNodeExt(ClickHouseTableNode, CreateTableUtils):
     def __init__(self, conn_str: (str, dict, None) = None, **kwarg):
         super(ClickHouseTableNodeExt, self).__init__(conn_str=conn_str, **kwarg)
 
-    def create_if_not_exists(self, db: str, table: str, sql: (str, pd.DataFrame, None),
-                             key_cols: list,
-                             primary_key_cols=None, sample_expr=None,
-                             engine_type: str = 'ReplacingMergeTree',
-                             extra_format_dict: (dict, None) = None, partitions_expr: (str, None) = None):
+    def create_view_if_not_exists(self, db: str, table: str, sql: str,
+                                  key_cols: list,
+                                  primary_key_cols=None, sample_expr=None,
+                                  engine_type: str = 'view',
+                                  extra_format_dict: (dict, None) = None, partitions_expr: (str, None) = None):
+        if not self._check_exists(f'{db}.{table}', mode='table'):
+            pass
+        else:
+            raise ClickHouseTableExistsError(f'{db}.{table} is exists!')
+        if engine_type.lower() == 'view':
+            create_sql = f'create view if not exists {db}.{table} as {sql}'
+            self.query(create_sql)
+        else:
+            raise ValueError(f'current not support material view : {engine_type}')
+
+    def create_table_if_not_exists(self, db: str, table: str, sql: (str, pd.DataFrame, None),
+                                   key_cols: list,
+                                   primary_key_cols=None, sample_expr=None,
+                                   engine_type: str = 'ReplacingMergeTree',
+                                   extra_format_dict: (dict, None) = None, partitions_expr: (str, None) = None):
+        """
+
+        :param db:
+        :param table:
+        :param sql:
+        :param key_cols:
+        :param primary_key_cols:
+        :param sample_expr:
+        :param engine_type:
+        :param extra_format_dict:
+        :param partitions_expr:
+        :return:
+        """
         if self._check_exists(f'{db}.{table}', mode='table'):
             pass
         else:
