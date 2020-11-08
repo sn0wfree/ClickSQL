@@ -1,20 +1,21 @@
 # coding=utf-8
-import asyncio
 import gzip
-import json
-from collections import namedtuple
-from functools import partial, partialmethod
-from urllib import parse
 import warnings
+from collections import namedtuple
+from urllib import parse
+
+import asyncio
+import json
 import nest_asyncio
 import pandas as pd
 import requests
 from aiohttp import ClientSession
+from functools import partial, partialmethod
 
 from ClickSQL.conf.parse_rfc_1738_args import parse_rfc1738_args
-from ClickSQL.utils.file_cache import file_cache
 from ClickSQL.errors import ParameterKeyError, ParameterTypeError, DatabaseTypeError, DatabaseError, \
-    HeartbeatCheckFailure, ClickHouseTableExistsError
+    HeartbeatCheckFailure
+from ClickSQL.utils.file_cache import file_cache
 
 """
 this will hold base function of clickhouse and it will apply a path of access clickhouse through clickhouse api service
@@ -344,6 +345,15 @@ class ClickHouseBaseNode(ClickHouseTools):
         else:
 
             return result
+
+    def __call__(self, *args, **kwargs):
+        """
+
+        :param args:
+        :param kwargs:
+        :return:
+        """
+        return self.query(*args, **kwargs)
 
     def query(self, *sql: str, loop=None, output_df: bool = True, raise_error=True):
 
