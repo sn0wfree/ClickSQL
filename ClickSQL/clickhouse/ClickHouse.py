@@ -14,7 +14,7 @@ from functools import partial, partialmethod
 
 from ClickSQL.conf.parse_rfc_1738_args import parse_rfc1738_args
 from ClickSQL.errors import ParameterKeyError, ParameterTypeError, DatabaseTypeError, DatabaseError, \
-    HeartbeatCheckFailure
+    HeartbeatCheckFailure, ClickHouseTableNotExistsError
 from ClickSQL.utils.file_cache import file_cache
 
 """
@@ -397,6 +397,22 @@ class ClickHouseTableNode(ClickHouseBaseNode):
         if db_settings['port'] is None:  # add default port for clickhouse
             db_settings['port'] = 8123
         super(ClickHouseTableNode, self).__init__(**db_settings)
+        self._table = self.tables[0]
+
+    @property
+    def columns(self):
+        # db_table: str = None
+        db_table = f"{self._db}.{self._table}"
+        sql = f'desc {db_table}'
+        res = self.execute(sql, convert_to='dataframe')['name'].tolist()
+        return res
+
+    @columns.setter
+    def columns(self, table: str):
+        if table in self.tables:
+            self._table = table
+        else:
+            raise ClickHouseTableNotExistsError(f'{table} not at {self._db}')
 
     @property
     def tables(self):
