@@ -155,7 +155,10 @@ class ClickHouseBaseNode(ClickHouseTools):
         self._check_db_settings_(db_settings, available_db_type=[node.__name__])
         self._para = node(db_settings['host'], db_settings['port'], db_settings['user'],
                           db_settings['password'], db_settings['database'])  # store connection information
-        self._db = self._para.database
+        if '.' in self._para.database:
+            self._db = self._para.database.split('.')[0]
+        else:
+            self._db = self._para.database
         self._connect_url = 'http://{user}:{passwd}@{host}:{port}'.format(user=self._para.user,
                                                                           passwd=self._para.password,
                                                                           host=self._para.host,
