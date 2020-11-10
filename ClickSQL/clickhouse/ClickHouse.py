@@ -437,6 +437,18 @@ class ClickHouseTableNode(ClickHouseBaseNode):
         res = self.execute(sql, convert_to='dataframe').values.ravel().tolist()
         return res
 
+    @staticmethod
+    def add_auto_increment_materialized_col(db_table: str, fid_col_name: str = 'fid'):
+        """
+        executable sql for clickhouse to add materialized column with auto-increment
+        :param db_table:
+        :param fid_col_name:
+        :return:
+        """
+
+        exec_express = "bitOr(bitShiftLeft(toUInt64(now64()),24), rowNumberInAllBlocks())"
+        return f"alter table {db_table} add column {fid_col_name} Int64  MATERIALIZED {exec_express}"
+
     def _check_exists(self, db_table: str, mode: str = 'table'):
         """
 
