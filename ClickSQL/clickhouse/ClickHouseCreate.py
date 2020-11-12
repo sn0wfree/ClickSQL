@@ -190,14 +190,17 @@ class CreateBuilder(object):
             return default
         else:
             cols_str = ','.join(cols)
-            return f"{prefix_clause} ( {cols_str} ) "
+            if len(cols) >= 2:
+                return f"{prefix_clause} ( {cols_str} ) "
+            else:
+                return f"{prefix_clause}  {cols_str}  "
 
     pass
 
 
 class CreateTableFromSQLUtils(object):
     @classmethod
-    def _obtain_describe_sql(cls, sql, pattern=r'[\s]+limit[\s]+[0-9]+$'):
+    def _obtain_describe_sql(cls, sql: str, pattern: str = r'[\s]+limit[\s]+[0-9]+$'):
         """
         detect limit end and obtain describe sql
         :param sql:
@@ -213,11 +216,15 @@ class CreateTableFromSQLUtils(object):
         return describe_sql
 
     @staticmethod
-    def _create_table_sql(db: str, table: str, dtypes_dict: dict,
+    def _create_table_sql(db: str, table: str, select_or_dtypes_dict: (str, dict),
                           order_by_key_cols: (list, tuple),
-                          primary_key_cols=None, sample_expr=None,
-                          engine_type: str = 'ReplacingMergeTree', partitions_expr=None,
-                          settings="SETTINGS index_granularity = 8192", other=''):
+                          primary_key_cols: (list, tuple, None) = None,
+                          sample_by_cols: (list, tuple, None) = None,
+                          partition_by_cols: (list, tuple, None) = None,
+                          engine_type: str = 'ReplacingMergeTree',
+                          on_cluster: str = '',
+                          settings: str = "SETTINGS index_granularity = 8192",
+                          other: str = '') -> str:
         """
         CREATE TABLE [IF NOT EXISTS] [db.]table_name [ON CLUSTER cluster]
                    (
@@ -233,7 +240,7 @@ class CreateTableFromSQLUtils(object):
 
         :param db:
         :param table:
-        :param dtypes_dict:
+        :param select_or_dtypes_dict:
         :param order_by_key_cols:
         :param primary_key_cols:
         :param sample_expr:
@@ -248,38 +255,45 @@ class CreateTableFromSQLUtils(object):
 
         # order_by_clause = f"ORDER BY ( {','.join(order_by_key_cols)} )"
         order_by_clause = CreateBuilder._assemble_conditions_clause('ORDER BY', order_by_key_cols, default=default)
-        # sample_clause = CreateBuilder._assemble_cols_2_clause('SAMPLE BY', sample_by_cols, default=default)
-        primary_by_clause = CreateBuilder._assemble_conditions_clause('PRIMARY BY', primary_key_cols, default=default)
-        # partition_by_clause = CreateBuilder._assemble_cols_2_clause('PARTITION BY', partition_by_cols, default=default)
+        sample_clause = CreateBuilder._assemble_conditions_clause('SAMPLE BY', sample_by_cols, default=default)
+        primary_by_clause = CreateBuilder._assemble_conditions_clause('PRIMARY KEY ', primary_key_cols, default=default)
+        partition_by_clause = CreateBuilder._assemble_conditions_clause('PARTITION BY', partition_by_cols,
+                                                                        default=default)
 
-        if partitions_expr is None:
-            partition_by_clause = ''
-        else:
-            partition_by_clause = f"PARTITION BY {partitions_expr}"
+        # if partitions_expr is None:
+        #     partition_by_clause = ''
+        # else:
+        #     partition_by_clause = f"PARTITION BY {partitions_expr}"
 
-        if sample_expr is None:
-            sample_clause = ''
-        else:
-            sample_clause = sample_expr
+        # if sample_expr is None:
+        #     sample_clause = ''
+        # else:
+        #     sample_clause = sample_expr
 
         # if primary_key_cols is None:
         #     primary_by_clause = ''
         # else:
         #     primary_key_expr = ','.join(primary_key_cols)
         #     primary_by_clause = f"PRIMARY BY ({primary_key_expr})"
-
-        cols_def = ','.join([f"{name} {d_type}" for name, d_type in dtypes_dict.items()])
-
-        main_body = f"CREATE TABLE IF NOT EXISTS {db}.{table} ( {cols_def} ) ENGINE = {engine_type}"
+        if isinstance(select_or_dtypes_dict, dict):
+            cols_def = ','.join([f"{name} {d_type}" for name, d_type in select_or_dtypes_dict.items()])
+            main_body = f"CREATE TABLE IF NOT EXISTS {db}.{table} {on_cluster} ( {cols_def} ) ENGINE = {engine_type}"
+            tail = ''
+        elif isinstance(select_or_dtypes_dict, str) and select_or_dtypes_dict.lower().startswith('select'):
+            main_body = f"CREATE TABLE IF NOT EXISTS {db}.{table} {on_cluster}  ENGINE = {engine_type} "
+            tail = f'as {select_or_dtypes_dict}'
+        else:
+            raise ParameterTypeError(
+                f'select_or_dtypes_dict only accept dict or str start with select! but get {select_or_dtypes_dict}')
 
         cond_clause = f" {partition_by_clause} {order_by_clause} {primary_by_clause} {sample_clause} "
 
-        base = f"{main_body} {cond_clause}  {other} {settings} "
+        base = f"{main_body} {cond_clause}  {other} {settings} {tail} "
 
         return base
 
     @staticmethod
-    def _check_end_with_limit(string, pattern=r'[\s]+limit[\s]+[0-9]+$'):
+    def _check_end_with_limit(string: str, pattern: str = r'[\s]+limit[\s]+[0-9]+$'):
         m = re.findall(pattern, string)
         if m is None or m == []:
             return False
@@ -287,7 +301,7 @@ class CreateTableFromSQLUtils(object):
             return True
 
     @staticmethod
-    def _translate_dtypes1_as_dtypes2(df: pd.DataFrame, src2target={'category': 'str'}):
+    def _translate_dtypes1_as_dtypes2(df: pd.DataFrame, src2target: dict = {'category': 'str'}):
         dtypes_series = df.dtypes
         for src, dest in src2target.items():
             if src in dtypes_series:
@@ -313,10 +327,14 @@ class CreateTableFromSQLUtils(object):
 
     @classmethod
     def _create_table_from_df(cls, db: str, table: str, df: pd.DataFrame, key_cols: (list, tuple),
-                              primary_key_cols=None, sample_expr=None,
-                              engine_type: str = 'ReplacingMergeTree', extra_format_dict=None, partitions_expr=None,
-                              settings="SETTINGS index_granularity = 8192",
-                              other=''):
+                              primary_key_cols: (list, tuple, None) = None,
+                              sample_by_cols: (list, tuple, None) = None,
+                              partition_by_cols: (list, tuple, None) = None,
+                              on_cluster: str = '',
+                              engine_type: str = 'ReplacingMergeTree',
+                              extra_format_dict: dict = None,
+                              settings: str = "SETTINGS index_granularity = 8192",
+                              other: str = ''):
 
         df = cls._translate_dtypes1_as_dtypes2(df, src2target={'category': 'str'})
         cols = df.columns
@@ -328,9 +346,10 @@ class CreateTableFromSQLUtils(object):
         dtypes_dict = {k: v for k, v in dtypes_dict.items() if k in cols}
         base = cls._create_table_sql(db, table, dtypes_dict, key_cols,
                                      primary_key_cols=primary_key_cols,
-                                     sample_expr=sample_expr,
+                                     sample_by_cols=sample_by_cols,
                                      engine_type=engine_type,
-                                     partitions_expr=partitions_expr,
+                                     on_cluster=on_cluster,
+                                     partition_by_cols=partition_by_cols,
                                      settings=settings,
                                      other=other
                                      )
@@ -339,11 +358,14 @@ class CreateTableFromSQLUtils(object):
     @classmethod
     def _create_table_from_sql(cls, db: str, table: str, sql: str, key_cols: list,
                                extra_format_dict: (dict, None) = None,
-                               primary_key_cols=None, sample_expr=None,
+                               primary_key_cols: (list, tuple, None) = None,
+                               sample_by_cols: (list, tuple, None) = None,
+                               partition_by_cols: (list, tuple, None) = None,
                                engine_type: str = 'ReplacingMergeTree',
-                               settings="SETTINGS index_granularity = 8192",
-                               other='', query=None,
-                               partitions_expr=None):
+                               on_cluster: str = '',
+                               settings: str = "SETTINGS index_granularity = 8192",
+                               other='',
+                               ):
         """
 
 
@@ -361,22 +383,26 @@ class CreateTableFromSQLUtils(object):
             if sql.lower().startswith('create'):
                 # if sql is create table sql will return directly
                 return sql
+            elif sql.lower().startswith('select'):
+                pass
+            else:
+                raise ParameterTypeError(f'sql must be string and start with select! but get {sql}')
         else:
-            raise ParameterTypeError('sql must be string')
+            raise ParameterTypeError(f'sql must be string and start with select! but get {sql}')
         # detect end with limit
-        describe_sql = cls._obtain_describe_sql(sql)
-        dtypes_df = query(describe_sql)
-        dtypes_dict = dict(dtypes_df[['name', 'type']].drop_duplicates().values)
+        # describe_sql = cls._obtain_describe_sql(sql)
+        # dtypes_df = query(describe_sql)
+        # dtypes_dict = dict(dtypes_df[['name', 'type']].drop_duplicates().values)
 
-        if isinstance(extra_format_dict, dict):
-            dtypes_dict.update(extra_format_dict)
-        else:
-            pass
-        sql = cls._create_table_sql(db, table, dtypes_dict, key_cols,
+        # if isinstance(extra_format_dict, dict):
+        #     dtypes_dict.update(extra_format_dict)
+        # else:
+        #     pass
+        sql = cls._create_table_sql(db, table, sql, key_cols,
                                     primary_key_cols=primary_key_cols,
-                                    sample_expr=sample_expr,
+                                    sample_by_cols=sample_by_cols, on_cluster=on_cluster,
                                     engine_type=engine_type,
-                                    partitions_expr=partitions_expr,
+                                    partition_by_cols=partition_by_cols,
                                     settings=settings,
                                     other=other)
 
@@ -386,22 +412,26 @@ class CreateTableFromSQLUtils(object):
     @classmethod
     def creator_sql(cls, db: str, table: str, df_or_sql: (pd.DataFrame, str), key_cols: (list, tuple),
                     extra_format_dict: (dict, None) = None,
-                    primary_key_cols=None, sample_expr=None,
-                    engine_type: str = 'ReplacingMergeTree', partitions_expr=None,
-                    settings="SETTINGS index_granularity = 8192",
-                    other='', query=None, ):
+                    primary_key_cols: (list, tuple, None) = None,
+                    sample_by_cols: (list, tuple, None) = None,
+                    partition_by_cols: (list, tuple, None) = None,
+                    on_cluster='',
+                    engine_type: str = 'ReplacingMergeTree',
+                    settings: str = "SETTINGS index_granularity = 8192",
+                    other: str = '',
+                    ):
         if isinstance(df_or_sql, pd.DataFrame):
             return cls._create_table_from_df(db, table, df_or_sql, key_cols,
-                                             primary_key_cols=primary_key_cols, sample_expr=sample_expr,
+                                             primary_key_cols=primary_key_cols, sample_by_cols=sample_by_cols,
                                              engine_type=engine_type, extra_format_dict=extra_format_dict,
-                                             partitions_expr=partitions_expr,
+                                             partition_by_cols=partition_by_cols, on_cluster=on_cluster,
                                              settings=settings,
                                              other=other)
         else:
-            return cls._create_table_from_sql(db, table, df_or_sql, key_cols, query=query,
-                                              primary_key_cols=primary_key_cols, sample_expr=sample_expr,
+            return cls._create_table_from_sql(db, table, df_or_sql, key_cols, on_cluster=on_cluster,
+                                              primary_key_cols=primary_key_cols, sample_by_cols=sample_by_cols,
                                               engine_type=engine_type, extra_format_dict=extra_format_dict,
-                                              partitions_expr=partitions_expr,
+                                              partition_by_cols=partition_by_cols,
                                               settings=settings,
                                               other=other)
         pass
@@ -500,34 +530,40 @@ class CreateTableUtils(CreateTableFromInfoUtils, CreateTableFromSQLUtils):
     # TODO test merge function for create table
     #
     @classmethod
-    def create(cls, db: str, table: str, df_or_sql_or_dict: (pd.DataFrame, str, dict),
-               key_cols: (list, tuple),
-               extra_format_dict: (dict, None) = None,
-               primary_key_cols=None,
-               sample_expr=None,
-               engine_type: str = 'ReplacingMergeTree',
-               partitions_expr=None,
-               settings="SETTINGS index_granularity = 8192",
-               on_cluster: str = '',
-               ttl: str = '',
-               other='',
-               query=None, ):
+    def _create(cls, db: str, table: str, df_or_sql_or_dict: (pd.DataFrame, str, dict),
+                key_cols: (list, tuple),
+                extra_format_dict: (dict, None) = None,
+                primary_key_cols: (list, tuple, None) = None,
+                sample_by_cols: (list, tuple, None) = None,
+                partition_by_cols: (list, tuple, None) = None,
+                settings: str = "SETTINGS index_granularity = 8192",
+                engine_type: str = 'ReplacingMergeTree',
+                on_cluster: str = '',
+                ttl: str = '',
+                other: str = '',
+                ):
         if isinstance(df_or_sql_or_dict, dict):
             db_table = f"{db}.{table}"
             var_dict = df_or_sql_or_dict
-            sql = cls.creator_info(db_table, var_dict, order_by_cols=key_cols,
-                                   sample_by_cols=None,  #: (list, tuple, None)
-                                   partition_by_cols=None,  # : (list, tuple, None)
+            sql = cls.creator_info(db_table, var_dict,
+                                   order_by_cols=key_cols,
+                                   sample_by_cols=sample_by_cols,  #: (list, tuple, None)
+                                   partition_by_cols=partition_by_cols,  # : (list, tuple, None)
                                    primary_by_cols=primary_key_cols,  # : (list, tuple, None)
                                    on_cluster=on_cluster,
                                    engine_type=engine_type,
                                    ttl=ttl, settings=settings)
         elif isinstance(df_or_sql_or_dict, (pd.DataFrame, str)):
 
-            sql = cls.creator_sql(db, table, df_or_sql_or_dict, key_cols, extra_format_dict=extra_format_dict,
-                                  primary_key_cols=primary_key_cols,
-                                  sample_expr=sample_expr, engine_type=engine_type, partitions_expr=partitions_expr,
-                                  settings=settings, other=other, query=query, )
+            sql = cls.creator_sql(db, table, df_or_sql_or_dict, key_cols,
+                                  extra_format_dict=extra_format_dict,
+                                  sample_by_cols=sample_by_cols,  #: (list, tuple, None)
+                                  partition_by_cols=partition_by_cols,  # : (list, tuple, None)
+                                  primary_key_cols=primary_key_cols,  # : (list, tuple, None)
+                                  on_cluster=on_cluster,
+                                  engine_type=engine_type,
+                                  settings=settings,
+                                  other=ttl + ' ' + other)
 
         else:
             raise ValueError(f'unsupported type of df_or_sql_or_dict: {type(df_or_sql_or_dict)}')
@@ -535,14 +571,17 @@ class CreateTableUtils(CreateTableFromInfoUtils, CreateTableFromSQLUtils):
 
 
 class TableEngineCreator(ClickHouseTableNode, CreateTableUtils):
-    def __init__(self, conn_str: (str, dict, None) = None, **kwarg):
+    def __init__(self, conn_str: (str, None) = None, **kwarg):
         super(TableEngineCreator, self).__init__(conn_str=conn_str, **kwarg)
 
     def _create_view(self, db: str, table: str, sql: str,
                      key_cols: list,
-                     primary_key_cols=None, sample_expr=None,
+                     primary_key_cols=None,
+                     sample_by_cols=None,
                      engine_type: str = 'view',
-                     extra_format_dict: (dict, None) = None, partitions_expr: (str, None) = None):
+                     extra_format_dict: (dict, None) = None,
+                     partition_by_cols: (str, None) = None,
+                     **kwargs):
         if not self._check_exists(f'{db}.{table}', mode='table'):
             pass
         else:
@@ -579,42 +618,47 @@ class TableEngineCreator(ClickHouseTableNode, CreateTableUtils):
     #                            extra_format_dict=extra_format_dict,
     #                            partitions_expr=partitions_expr)
 
-    def _create_table(self, db: str, table: str, sql: (str, pd.DataFrame, None), key_cols: list,
-                      primary_key_cols=None, sample_expr=None,
-                      engine_type: str = 'ReplacingMergeTree',
-                      extra_format_dict: (dict, None) = None, partitions_expr: (str, None) = None) -> object:
+    def create(self,
+               db: str,
+               table: str,
+               sql: (str, pd.DataFrame, dict),
+               key_cols: list,
+               engine_type: str = 'ReplacingMergeTree',
+               primary_key_cols: (list, tuple, None) = None,
+               sample_by_cols: (list, tuple, None) = None,
+               extra_format_dict: (dict, None) = None,
+               partition_by_cols: (list, tuple, None) = None,
+               settings: str = "SETTINGS index_granularity = 8192",
+               on_cluster: str = '',
+               ttl: str = '',
+               other: str = '',
+               check: bool = True,
+               execute: bool = False):
 
-        # if sql is None:  # create table from sql
-        #     create_sql = self._create_table_from_sql(db, table, None, key_cols,
-        #                                              primary_key_cols=primary_key_cols, sample_expr=sample_expr,
-        #                                              engine_type=engine_type,
-        #                                              extra_format_dict=extra_format_dict,
-        #                                              partitions_expr=partitions_expr,
-        #                                              )
-        if self._check_exists(f'{db}.{table}', mode='table'):
-            raise ClickHouseTableExistsError(f'{db}.{table} is exists!')
-        else:
-            if isinstance(sql, str):
-                create_sql = self._create_table_from_sql(db, table, sql, key_cols,
-                                                         primary_key_cols=primary_key_cols,
-                                                         sample_expr=sample_expr,
-                                                         engine_type=engine_type,
-                                                         extra_format_dict=extra_format_dict,
-                                                         partitions_expr=partitions_expr, query=self.query)
-            elif isinstance(sql, pd.DataFrame):
-                create_sql = self._create_table_from_df(db, table, sql, key_cols,
-                                                        primary_key_cols=primary_key_cols,
-                                                        sample_expr=sample_expr,
-                                                        engine_type=engine_type,
-                                                        extra_format_dict=extra_format_dict,
-                                                        partitions_expr=partitions_expr)
-            else:
-                raise ParameterTypeError(f'unknown sql type: {type(sql)} @ {sql}')
-
+        # if self._check_exists(f'{db}.{table}', mode='table'):
+        #     raise ClickHouseTableExistsError(f'{db}.{table} is exists!')
+        # else:
+        create_sql = self._create(db, table, sql,
+                                  key_cols,
+                                  extra_format_dict=extra_format_dict,
+                                  primary_key_cols=primary_key_cols,
+                                  sample_by_cols=sample_by_cols,
+                                  partition_by_cols=partition_by_cols,
+                                  settings=settings,
+                                  engine_type=engine_type,
+                                  on_cluster=on_cluster,
+                                  ttl=ttl,
+                                  other=other,
+                                  )
+        if check:
             exist_status = self._check_exists(db_table=f'{db}.{table}')
+
             if exist_status:
                 raise ClickHouseTableExistsError(f'{db}.{table} is exists!')
+        if execute:
             self.query(create_sql)
+        else:
+            return create_sql
 
 
 # @LazyInit
@@ -887,14 +931,4 @@ class TableEngineCreator(ClickHouseTableNode, CreateTableUtils):
 #         ## todo check the table exists
 #         pass
 if __name__ == '__main__':
-    c = CreateTableFromInfoUtils.creator_info(db_table='test.test',
-                                             var_dict={'test1': 'String', 'test2': 'String'},
-                                             order_by_cols=['test1'],
-                                             sample_by_cols=None,
-                                             partition_by_cols=None,
-                                             primary_by_cols=None,
-                                             on_cluster='',
-                                             engine_type='MergeTree',
-                                             ttl='')
-    print(c)
     pass

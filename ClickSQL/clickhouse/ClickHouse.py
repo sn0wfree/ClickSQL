@@ -449,14 +449,14 @@ class ClickHouseTableNode(ClickHouseBaseNode):
         exec_express = "bitOr(bitShiftLeft(toUInt64(now64()),24), rowNumberInAllBlocks())"
         return f"alter table {db_table} add column {fid_col_name} Int64  MATERIALIZED {exec_express}"
 
-    def _check_exists(self, db_table: str, mode: str = 'table'):
+    def _check_exists(self, db_table: str, mode: str = 'table', output=True):
         """
 
         :param db_table:
         :param mode:
         :return:
         """
-        ## TODO check table exists
+        # TODO check table exists
         if isinstance(db_table, str):
             if '.' in db_table:
                 db, table = db_table.split('.')
@@ -464,8 +464,8 @@ class ClickHouseTableNode(ClickHouseBaseNode):
                 db, table = self._db, db_table
         else:
             raise ValueError('please input correct db.table information')
-
-        print(f'will detect {db}.{table}')
+        if output:
+            print(f'will detect {db}.{table} existence!')
 
         if mode == 'table':
             if db == self._db:
