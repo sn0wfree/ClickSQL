@@ -9,47 +9,47 @@ from ClickSQL.errors import ClickHouseTableExistsError, ParameterTypeError
 class SQLBuilder(object):
 
     @staticmethod
-    def _assemble_sample(sample=None):
+    def _assemble_sample(sample=None) -> str:
         sample_clause = '' if sample is None else f'SAMPLE {sample}'
         return sample_clause
 
     @staticmethod
-    def _assemble_array_join(array_join_list=None):
+    def _assemble_array_join(array_join_list: (list, tuple, None) = None) -> str:
 
         array_join_clause = '' if array_join_list is None else f"ARRAY JOIN {', '.join(array_join_list)}"
 
         return array_join_clause
 
     @staticmethod
-    def _assemble_join(join_info_dict=None):
+    def _assemble_join(join_info_dict: (dict, None) = None) -> str:
         if join_info_dict is None:
             join_clause = ''
-        else:
+        elif isinstance(join_info_dict, dict):
             join_type = join_info_dict.get('type')
-            on_ = join_info_dict.get('ON')
-            using_ = join_info_dict.get('USING')
-
             if join_type is None:
                 raise ValueError('join_info_dict cannot locate join_type condition')
-
+            on_ = join_info_dict.get('ON')
             if on_ is None:
+                using_ = join_info_dict.get('USING')
                 if using_ is None:
                     raise ValueError('join_info_dict cannot locate ON or USING condition')
                 else:
                     join_clause = f'{join_type} USING ({using_})'
             else:
                 join_clause = f'{join_type} ON {on_}'
+        else:
+            raise ValueError('join_info_dict must accept dict or None')
         return join_clause
 
     @staticmethod
-    def _assemble_where_like(a_list, prefix='WHERE'):
+    def _assemble_where_like(a_list, prefix='WHERE') -> str:
 
         sample_clause = '' if a_list is None else f"{prefix} {' and '.join(a_list)}"
 
         return sample_clause
 
     @staticmethod
-    def _assemble_group_by(group_by_cols=None):
+    def _assemble_group_by(group_by_cols=None) -> str:
         if group_by_cols is None:
             sample_clause = ''
         else:
@@ -58,14 +58,14 @@ class SQLBuilder(object):
         return sample_clause
 
     @staticmethod
-    def _assemble_order_by(order_by_cols=None):
+    def _assemble_order_by(order_by_cols=None) -> str:
 
         sample_clause = '' if order_by_cols is None else f"ORDER BY ({','.join(order_by_cols)})"
 
         return sample_clause
 
     @staticmethod
-    def _assemble_limit_by(limit_n_by_dict=None):
+    def _assemble_limit_by(limit_n_by_dict=None) -> str:
 
         if limit_n_by_dict is None:
             sample_clause = ''
@@ -76,7 +76,7 @@ class SQLBuilder(object):
         return sample_clause
 
     @staticmethod
-    def _assemble_limit(limit_n=None):
+    def _assemble_limit(limit_n=None) -> str:
 
         if limit_n is None:
             SAMPLE_CLAUSE = ''
@@ -85,23 +85,23 @@ class SQLBuilder(object):
         return SAMPLE_CLAUSE
 
     @staticmethod
-    def raw_create_select_sql(SELECT_CLAUSE: str, DB_TABLE: str, SAMPLE_CLAUSE: str, ARRAY_JOIN_CLAUSE: str,
-                              JOIN_CLAUSE: str, PREWHERE_CLAUSE: str, WHERE_CLAUSE: str, GROUP_BY_CLAUSE: str,
-                              HAVING_CLAUSE: str, ORDER_BY_CLAUSE: str, LIMIT_N_CLAUSE: str, LIMIT_CLAUSE: str):
+    def raw_create_select_sql(select_clause: str, db_table: str, sample_clause: str, array_join_clause: str,
+                              join_clause: str, prewhere_clause: str, where_clause: str, group_by_clause: str,
+                              having_clause: str, order_by_clause: str, limit_n_clause: str, limit_clause: str) -> str:
         """
 
-        :param SELECT_CLAUSE:
-        :param DB_TABLE:
-        :param SAMPLE_CLAUSE:
-        :param ARRAY_JOIN_CLAUSE:
-        :param JOIN_CLAUSE:
-        :param PREWHERE_CLAUSE:
-        :param WHERE_CLAUSE:
-        :param GROUP_BY_CLAUSE:
-        :param HAVING_CLAUSE:
-        :param ORDER_BY_CLAUSE:
-        :param LIMIT_N_CLAUSE:
-        :param LIMIT_CLAUSE:
+        :param select_clause:
+        :param db_table:
+        :param sample_clause:
+        :param array_join_clause:
+        :param join_clause:
+        :param prewhere_clause:
+        :param where_clause:
+        :param group_by_clause:
+        :param having_clause:
+        :param order_by_clause:
+        :param limit_n_clause:
+        :param limit_clause:
         :return:
         """
         """SELECT [DISTINCT] expr_list
@@ -119,14 +119,14 @@ class SQLBuilder(object):
                     [UNION ALL ...]
                     [INTO OUTFILE filename]
                     [FORMAT format]"""
-        if DB_TABLE.lower().startswith('select '):
-            DB_TABLE = f"( {DB_TABLE} )"
+        if db_table.lower().startswith('select '):
+            db_table = f"( {db_table} )"
         else:
             pass
-        main_body = f"SELECT {SELECT_CLAUSE} FROM {DB_TABLE} {SAMPLE_CLAUSE}"
-        join = f"{ARRAY_JOIN_CLAUSE} {JOIN_CLAUSE}"
-        where_conditions = f"{PREWHERE_CLAUSE} {WHERE_CLAUSE} {GROUP_BY_CLAUSE} {HAVING_CLAUSE} "
-        order_limit = f"{ORDER_BY_CLAUSE} {LIMIT_N_CLAUSE} {LIMIT_CLAUSE}"
+        main_body = f"SELECT {select_clause} FROM {db_table} {sample_clause}"
+        join = f"{array_join_clause} {join_clause}"
+        where_conditions = f"{prewhere_clause} {where_clause} {group_by_clause} {having_clause} "
+        order_limit = f"{order_by_clause} {limit_n_clause} {limit_clause}"
         sql = f"{main_body} {join} {where_conditions} {order_limit}"
         return sql
 
@@ -178,7 +178,7 @@ class SQLBuilder(object):
 
 class CreateBuilder(object):
     @staticmethod
-    def _assemble_conditions_clause(prefix_clause: str, cols: (list, tuple, None), default=''):
+    def _assemble_conditions_clause(prefix_clause: str, cols: (list, tuple, None), default: str = '') -> str:
         """
 
         :param prefix_clause:
@@ -195,12 +195,10 @@ class CreateBuilder(object):
             else:
                 return f"{prefix_clause}  {cols_str}  "
 
-    pass
-
 
 class CreateTableFromSQLUtils(object):
     @classmethod
-    def _obtain_describe_sql(cls, sql: str, pattern: str = r'[\s]+limit[\s]+[0-9]+$'):
+    def _obtain_describe_sql(cls, sql: str, pattern: str = r'[\s]+limit[\s]+[0-9]+$') -> str:
         """
         detect limit end and obtain describe sql
         :param sql:
@@ -243,9 +241,9 @@ class CreateTableFromSQLUtils(object):
         :param select_or_dtypes_dict:
         :param order_by_key_cols:
         :param primary_key_cols:
-        :param sample_expr:
+        :param sample_by_cols:
         :param engine_type:
-        :param partitions_expr:
+        :param partition_by_cols:
         :param settings:
         :param other:
         :return:
@@ -294,6 +292,13 @@ class CreateTableFromSQLUtils(object):
 
     @staticmethod
     def _check_end_with_limit(string: str, pattern: str = r'[\s]+limit[\s]+[0-9]+$'):
+        """
+
+        :param string:
+        :param pattern:
+        :return:
+        """
+
         m = re.findall(pattern, string)
         if m is None or m == []:
             return False
@@ -301,7 +306,15 @@ class CreateTableFromSQLUtils(object):
             return True
 
     @staticmethod
-    def _translate_dtypes1_as_dtypes2(df: pd.DataFrame, src2target: dict = {'category': 'str'}):
+    def _translate_dtypes1_as_dtypes2(df: pd.DataFrame, src2target=None):
+        """
+
+        :param df:
+        :param src2target:
+        :return:
+        """
+        if src2target is None:
+            src2target = {'category': 'str'}
         dtypes_series = df.dtypes
         for src, dest in src2target.items():
             if src in dtypes_series:
@@ -314,8 +327,17 @@ class CreateTableFromSQLUtils(object):
 
     @staticmethod
     def _translate_dtypes_from_df(df: pd.DataFrame,
-                                  translate_dtypes: dict = {'object': 'String', 'datetime64[ns]': 'Datetime'}):
+                                  translate_dtypes=None):
+        """
 
+        :param df:
+        :param translate_dtypes:
+        :return:
+        """
+
+        if translate_dtypes is None:
+            translate_dtypes = {'object': 'String',
+                                'datetime64[ns]': 'Datetime'}
         if hasattr(df, 'dtypes'):
             dtypes_series = df.dtypes.replace(translate_dtypes)
             return dtypes_series.map(lambda x: str(x).capitalize()).to_dict()
@@ -335,6 +357,22 @@ class CreateTableFromSQLUtils(object):
                               extra_format_dict: dict = None,
                               settings: str = "SETTINGS index_granularity = 8192",
                               other: str = ''):
+        """
+
+        :param db:  str
+        :param table:
+        :param df:
+        :param key_cols:
+        :param primary_key_cols:
+        :param sample_by_cols:
+        :param partition_by_cols:
+        :param on_cluster:
+        :param engine_type:
+        :param extra_format_dict:
+        :param settings:
+        :param other:
+        :return:
+        """
 
         df = cls._translate_dtypes1_as_dtypes2(df, src2target={'category': 'str'})
         cols = df.columns
@@ -343,16 +381,15 @@ class CreateTableFromSQLUtils(object):
             pass
         else:
             dtypes_dict.update(extra_format_dict)
-        dtypes_dict = {k: v for k, v in dtypes_dict.items() if k in cols}
-        base = cls._create_table_sql(db, table, dtypes_dict, key_cols,
+        dtypes_str = {k: v for k, v in dtypes_dict.items() if k in cols}
+        base = cls._create_table_sql(db, table, dtypes_str, key_cols,
                                      primary_key_cols=primary_key_cols,
                                      sample_by_cols=sample_by_cols,
                                      engine_type=engine_type,
                                      on_cluster=on_cluster,
                                      partition_by_cols=partition_by_cols,
                                      settings=settings,
-                                     other=other
-                                     )
+                                     other=other)
         return base
 
     @classmethod
@@ -364,7 +401,7 @@ class CreateTableFromSQLUtils(object):
                                engine_type: str = 'ReplacingMergeTree',
                                on_cluster: str = '',
                                settings: str = "SETTINGS index_granularity = 8192",
-                               other='',
+                               other: str = '',
                                ):
         """
 
@@ -420,6 +457,22 @@ class CreateTableFromSQLUtils(object):
                     settings: str = "SETTINGS index_granularity = 8192",
                     other: str = '',
                     ):
+        """
+
+        :param db:
+        :param table:
+        :param df_or_sql:
+        :param key_cols:
+        :param extra_format_dict:
+        :param primary_key_cols:
+        :param sample_by_cols:
+        :param partition_by_cols:
+        :param on_cluster:
+        :param engine_type:
+        :param settings:
+        :param other:
+        :return:
+        """
         if isinstance(df_or_sql, pd.DataFrame):
             return cls._create_table_from_df(db, table, df_or_sql, key_cols,
                                              primary_key_cols=primary_key_cols, sample_by_cols=sample_by_cols,
@@ -449,8 +502,7 @@ class CreateTableFromInfoUtils(object):
                               on_cluster: str = '',
                               partition_by_clause: str = '',
                               ttl: str = '',
-                              settings="SETTINGS index_granularity = 8192"
-                              ):
+                              settings: str = "SETTINGS index_granularity = 8192"):
         # TODO add ttl expr at future
         """
         CREATE TABLE [IF NOT EXISTS] [db.]table_name [ON CLUSTER cluster]
@@ -494,8 +546,7 @@ class CreateTableFromInfoUtils(object):
                      on_cluster: str = '',
                      engine_type: str = 'ReplacingMergeTree',
                      ttl: str = '',
-                     settings="SETTINGS index_granularity = 8192"
-                     ):
+                     settings="SETTINGS index_granularity = 8192"):
         """
 
         :param settings:
@@ -515,7 +566,7 @@ class CreateTableFromInfoUtils(object):
 
         order_by_clause = CreateBuilder._assemble_conditions_clause('ORDER BY', order_by_cols, default=default)
         sample_clause = CreateBuilder._assemble_conditions_clause('SAMPLE BY', sample_by_cols, default=default)
-        primary_by_clause = CreateBuilder._assemble_conditions_clause('PRIMARY BY', primary_by_cols, default=default)
+        primary_by_clause = CreateBuilder._assemble_conditions_clause('PRIMARY KEY', primary_by_cols, default=default)
         partition_by_clause = CreateBuilder._assemble_conditions_clause('PARTITION BY', partition_by_cols,
                                                                         default=default)
 
@@ -540,8 +591,27 @@ class CreateTableUtils(CreateTableFromInfoUtils, CreateTableFromSQLUtils):
                 engine_type: str = 'ReplacingMergeTree',
                 on_cluster: str = '',
                 ttl: str = '',
-                other: str = '',
-                ):
+                other: str = ''):
+        """
+
+
+        df_or_sql_or_dict
+
+        :param db:
+        :param table:
+        :param df_or_sql_or_dict: pd.DataFrame & sql string or dtype dict
+        :param key_cols:
+        :param extra_format_dict:
+        :param primary_key_cols:
+        :param sample_by_cols:
+        :param partition_by_cols:
+        :param settings:
+        :param engine_type:
+        :param on_cluster:
+        :param ttl:
+        :param other:
+        :return:
+        """
         if isinstance(df_or_sql_or_dict, dict):
             db_table = f"{db}.{table}"
             var_dict = df_or_sql_or_dict
@@ -582,6 +652,20 @@ class TableEngineCreator(ClickHouseTableNode, CreateTableUtils):
                      extra_format_dict: (dict, None) = None,
                      partition_by_cols: (str, None) = None,
                      **kwargs):
+        """
+
+        :param db:
+        :param table:
+        :param sql:
+        :param key_cols:
+        :param primary_key_cols:
+        :param sample_by_cols:
+        :param engine_type:
+        :param extra_format_dict:
+        :param partition_by_cols:
+        :param kwargs:
+        :return:
+        """
         if not self._check_exists(f'{db}.{table}', mode='table'):
             pass
         else:
@@ -621,7 +705,7 @@ class TableEngineCreator(ClickHouseTableNode, CreateTableUtils):
     def create(self,
                db: str,
                table: str,
-               sql: (str, pd.DataFrame, dict),
+               df_or_sql_or_dict: (str, pd.DataFrame, dict),
                key_cols: list,
                engine_type: str = 'ReplacingMergeTree',
                primary_key_cols: (list, tuple, None) = None,
@@ -634,11 +718,32 @@ class TableEngineCreator(ClickHouseTableNode, CreateTableUtils):
                other: str = '',
                check: bool = True,
                execute: bool = False):
+        """
+
+        df_or_sql_or_dict : can be set up sql query or data or create table dtypes dict
+
+        :param db:
+        :param table:
+        :param df_or_sql_or_dict:
+        :param key_cols:
+        :param engine_type:
+        :param primary_key_cols:
+        :param sample_by_cols:
+        :param extra_format_dict:
+        :param partition_by_cols:
+        :param settings:
+        :param on_cluster:
+        :param ttl:
+        :param other:
+        :param check:
+        :param execute:
+        :return:
+        """
 
         # if self._check_exists(f'{db}.{table}', mode='table'):
         #     raise ClickHouseTableExistsError(f'{db}.{table} is exists!')
         # else:
-        create_sql = self._create(db, table, sql,
+        create_sql = self._create(db, table, df_or_sql_or_dict,
                                   key_cols,
                                   extra_format_dict=extra_format_dict,
                                   primary_key_cols=primary_key_cols,
@@ -648,12 +753,9 @@ class TableEngineCreator(ClickHouseTableNode, CreateTableUtils):
                                   engine_type=engine_type,
                                   on_cluster=on_cluster,
                                   ttl=ttl,
-                                  other=other,
-                                  )
+                                  other=other)
         if check:
-            exist_status = self._check_exists(db_table=f'{db}.{table}')
-
-            if exist_status:
+            if self._check_exists(db_table=f'{db}.{table}'):
                 raise ClickHouseTableExistsError(f'{db}.{table} is exists!')
         if execute:
             self.query(create_sql)
@@ -661,274 +763,5 @@ class TableEngineCreator(ClickHouseTableNode, CreateTableUtils):
             return create_sql
 
 
-# @LazyInit
-# class MergeTree(object):
-#     def __init__(self, db_table: str, dtypes_dict: dict, order_by_key_cols: (list, tuple), primary_key_cols=None,
-#                  sample_expr=None, partitions_expr=None, settings="SETTINGS index_granularity = 8192"):
-#         pass
-#
-#     @classmethod
-#     def _create_table_sql(cls, db_table: str, dtypes_dict: dict,
-#                           order_by_key_cols: (list, tuple),
-#                           primary_key_cols=None, sample_expr=None,
-#                           engine_type: str = 'MergeTree', partitions_expr=None,
-#                           settings="SETTINGS index_granularity = 8192", other=''):
-#         """
-#
-#         :param db:
-#         :param table:
-#         :param dtypes_dict:
-#         :param order_by_key_cols:
-#         :param primary_key_cols:
-#         :param sample_expr:
-#         :param engine_type:
-#         :param partitions_expr:
-#         :param settings:
-#         :param other:
-#         :return:
-#         """
-#         """CREATE TABLE [IF NOT EXISTS] [db.]table_name [ON CLUSTER cluster]
-#                    (
-#                        name1 [type1] [DEFAULT|MATERIALIZED|ALIAS expr1],
-#                        name2 [type2] [DEFAULT|MATERIALIZED|ALIAS expr2],
-#                        ...
-#                    ) ENGINE = ReplacingMergeTree([ver])
-#                    [PARTITION BY expr]
-#                    [ORDER BY expr]
-#                    [PRIMARY KEY expr]
-#                    [SAMPLE BY expr]
-#                    [SETTINGS name=value, ...]"""
-#
-#         cols_def_str = ''
-#         order_by_key_str = ','.join(order_by_key_cols)
-#         primary_key_cols_str = ''
-#         sample = ''
-#         main_body = f"CREATE TABLE IF NOT EXISTS {db_table} ({cols_def_str}) ENGINE={engine_type}"
-#         main_settings = f"ORDER BY ({order_by_key_str}) PRIMARY KEY ({primary_key_cols_str}) SAMPLE BY {sample} {settings}"
-#
-#         cols_def = ','.join([f"{name} {d_type}" for name, d_type in dtypes_dict.items()])
-#
-#         maid_body = f"CREATE TABLE IF NOT EXISTS {db}.{table} ( {cols_def} ) ENGINE = {engine_type}"
-#
-#         ORDER_BY_CLAUSE = f"ORDER BY ( {','.join(order_by_key_cols)} )"
-#
-#         if partitions_expr is None:
-#             PARTITION_by_CLAUSE = ''
-#         else:
-#             PARTITION_by_CLAUSE = f"PARTITION BY {partitions_expr}"
-#
-#         if primary_key_cols is None:
-#             PRIMARY_BY_CLAUSE = ''
-#         else:
-#             primary_key_expr = ','.join(primary_key_cols)
-#             PRIMARY_BY_CLAUSE = f" primary key by ({primary_key_expr})"
-#
-#         if sample_expr is None:
-#             SAMPLE_CLAUSE = ''
-#         else:
-#             SAMPLE_CLAUSE = sample_expr
-#
-#         base = f"{maid_body} {PARTITION_by_CLAUSE} {ORDER_BY_CLAUSE} {PRIMARY_BY_CLAUSE} {SAMPLE_CLAUSE} {other} {settings}"
-#
-#         return base
-#
-#
-# class ClickHouseTableNodeExt(ClickHouseTableNode):
-#     @classmethod
-#     def _create_table(cls, obj: object, db: str, table: str, sql: str, key_cols: list,
-#                       engine_type: str = 'ReplacingMergeTree',
-#                       extra_format_dict: (dict, None) = None, partitions_expr: (str, None) = None) -> object:
-#         if isinstance(sql, str):
-#             return cls._create_table_from_sql(obj, db, table, sql, key_cols,
-#                                               engine_type=engine_type,
-#                                               extra_format_dict=extra_format_dict, partitions_expr=partitions_expr)
-#         elif isinstance(sql, pd.DataFrame):
-#             return cls._create_table_from_df(obj, db, table, sql, key_cols,
-#                                              engine_type='ReplacingMergeTree',
-#                                              extra_format_dict=extra_format_dict, partitions_expr=partitions_expr)
-#         else:
-#             raise ValueError(f'unknown sql:{sql}')
-#
-#     @classmethod
-#     def _create_table_from_df(cls, obj: object, db: str, table: str, df: pd.DataFrame, key_cols: (list, tuple),
-#                               engine_type: str = 'ReplacingMergeTree', extra_format_dict=None, partitions_expr=None):
-#         query_func = obj.query
-#
-#         df = cls.translate_dtypes1_as_dtypes2(df, src2target={'category': 'str'})
-#         cols = df.columns
-#         dtypes_dict = cls.translate_dtypes_from_df(df)
-#         if extra_format_dict is None:
-#             pass
-#         else:
-#             dtypes_dict.update(extra_format_dict)
-#         dtypes_dict = {k: v for k, v in dtypes_dict.items() if k in cols}
-#         base = cls._create_table_from_sql(db, table, dtypes_dict, key_cols, engine_type=engine_type,
-#                                           extra_format_dict=extra_format_dict, partitions_expr=partitions_expr)
-#         exist_status = cls._check_table_exists(obj, db, table)
-#
-#         query_func(base)
-#         return exist_status
-#
-#     @classmethod
-#     def _create_table_sql(cls, db: str, table: str, dtypes_dict: dict,
-#                           order_by_key_cols: (list, tuple),
-#                           primary_key_cols=None, sample_expr=None,
-#                           engine_type: str = 'ReplacingMergeTree', partitions_expr=None,
-#                           settings="SETTINGS index_granularity = 8192", other=''):
-#         """
-#
-#         :param db:
-#         :param table:
-#         :param dtypes_dict:
-#         :param order_by_key_cols:
-#         :param primary_key_cols:
-#         :param sample_expr:
-#         :param engine_type:
-#         :param partitions_expr:
-#         :param settings:
-#         :param other:
-#         :return:
-#         """
-#         """CREATE TABLE [IF NOT EXISTS] [db.]table_name [ON CLUSTER cluster]
-#                    (
-#                        name1 [type1] [DEFAULT|MATERIALIZED|ALIAS expr1],
-#                        name2 [type2] [DEFAULT|MATERIALIZED|ALIAS expr2],
-#                        ...
-#                    ) ENGINE = ReplacingMergeTree([ver])
-#                    [PARTITION BY expr]
-#                    [ORDER BY expr]
-#                    [PRIMARY KEY expr]
-#                    [SAMPLE BY expr]
-#                    [SETTINGS name=value, ...]"""
-#
-#         cols_def = ','.join([f"{name} {d_type}" for name, d_type in dtypes_dict.items()])
-#
-#         maid_body = f"CREATE TABLE IF NOT EXISTS {db}.{table} ( {cols_def} ) ENGINE = {engine_type}"
-#
-#         ORDER_BY_CLAUSE = f"ORDER BY ( {','.join(order_by_key_cols)} )"
-#
-#         if partitions_expr is None:
-#             PARTITION_by_CLAUSE = ''
-#         else:
-#             PARTITION_by_CLAUSE = f"PARTITION BY {partitions_expr}"
-#
-#         if primary_key_cols is None:
-#             PRIMARY_BY_CLAUSE = ''
-#         else:
-#             primary_key_expr = ','.join(primary_key_cols)
-#             PRIMARY_BY_CLAUSE = f"PARTITION BY ({primary_key_expr})"
-#
-#         if sample_expr is None:
-#             SAMPLE_CLAUSE = ''
-#         else:
-#             SAMPLE_CLAUSE = sample_expr
-#
-#         base = f"{maid_body} {PARTITION_by_CLAUSE} {ORDER_BY_CLAUSE} {PRIMARY_BY_CLAUSE} {SAMPLE_CLAUSE} {other} {settings}"
-#
-#         return base
-#
-#     @staticmethod
-#     def _check_end_with_limit(string, pattern=r'[\s]+limit[\s]+[0-9]+$'):
-#         m = re.findall(pattern, string)
-#         if m is None or m == []:
-#             return False
-#         else:
-#             return True
-#
-#     @classmethod
-#     def _create_table_from_sql(cls, db: str, table: str, sql: str, key_cols: list,
-#                                extra_format_dict: (dict, None) = None,
-#                                primary_key_cols=None, sample_expr=None, other='',
-#                                engine_type: str = 'ReplacingMergeTree',
-#                                partitions_expr=None, query_func=None):
-#         """
-#
-#         :param obj:
-#         :param db:
-#         :param table:
-#         :param sql:
-#         :param key_cols:
-#         :param engine_type:
-#         :param extra_format_dict:
-#         :return:
-#         """
-#
-#         if isinstance(sql, str):
-#             pass
-#         else:
-#             raise ValueError('sql must be string')
-#
-#         limit_status = cls._check_end_with_limit(sql, pattern=r'[\s]+limit[\s]+[0-9]+$')
-#         if limit_status:
-#             describe_sql = f' describe({sql}) '
-#         else:
-#             describe_sql = f'describe ( {sql} limit 1)'
-#
-#         if query_func is None:
-#             raise ValueError('query function should be set!')
-#
-#         dtypes_df = query_func(describe_sql)
-#
-#         dtypes_dict = dict(dtypes_df[['name', 'type']].drop_duplicates().values)
-#         if extra_format_dict is None:
-#             pass
-#         else:
-#             dtypes_dict.update(extra_format_dict)
-#         sql = cls._create_table_sql(db, table, dtypes_dict, key_cols, engine_type=engine_type,
-#                                     primary_key_cols=primary_key_cols, sample_expr=sample_expr,
-#                                     partitions_expr=partitions_expr, other=other)
-#
-#         return sql
-#
-#     @staticmethod
-#     def translate_dtypes1_as_dtypes2(df: pd.DataFrame, src2target={'category': 'str'}):
-#         dtypes_series = df.dtypes
-#         for src, dest in src2target.items():
-#             if src in dtypes_series:
-#                 category_cols = dtypes_series[dtypes_series == src].index
-#                 for col in category_cols:
-#                     df[col] = df[col].astype(dest)
-#             else:
-#                 pass
-#         return df
-#
-#     @staticmethod
-#     def translate_dtypes_from_df(df: pd.DataFrame, translate_dtypes: dict = {'object': 'String',
-#                                                                              'datetime64[ns]': 'Datetime'}):
-#         if hasattr(df, 'dtypes'):
-#             dtypes_series = df.dtypes.replace(translate_dtypes)
-#             return dtypes_series.map(lambda x: str(x).capitalize()).to_dict()
-#         elif hasattr(df, '_columns_') and 'type' in df._columns_ and 'name' in df._columns_:
-#             dtypes_series = df.set_index('name')['type'].replace(translate_dtypes)
-#             return dtypes_series.map(lambda x: str(x)).to_dict()
-#         else:
-#             raise ValueError(f'unknown df:{type(df)}')
-#
-#     @classmethod
-#     def _create_table_from_df(cls, db: str, table: str, df: pd.DataFrame, key_cols: (list, tuple),
-#                               engine_type: str = 'ReplacingMergeTree', extra_format_dict=None, partitions_expr=None,
-#                               src2target={'category': 'str'},
-#                               query_func=None
-#                               ):
-#
-#         df = cls.translate_dtypes1_as_dtypes2(df, src2target={'category': 'str'})
-#         cols = df.columns
-#         dtypes_dict = cls.translate_dtypes_from_df(df)
-#         if extra_format_dict is None:
-#             pass
-#         else:
-#             dtypes_dict.update(extra_format_dict)
-#         dtypes_dict = {k: v for k, v in dtypes_dict.items() if k in cols}
-#         base = cls._create_table_from_sql(db, table, dtypes_dict, key_cols, engine_type=engine_type,
-#                                           extra_format_dict=extra_format_dict, partitions_expr=partitions_expr)
-#         exist_status = cls._check_table_exists(obj, db, table)
-#
-#         query_func(base)
-#         return exist_status
-#
-#     @classmethod
-#     def _check_table_exists(cls, obj, db, table):
-#         ## todo check the table exists
-#         pass
 if __name__ == '__main__':
     pass
