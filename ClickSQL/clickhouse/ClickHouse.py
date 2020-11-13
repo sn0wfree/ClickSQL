@@ -10,7 +10,7 @@ import nest_asyncio
 import pandas as pd
 import requests
 from aiohttp import ClientSession
-from functools import partial, partialmethod
+from functools import partial, partialmethod,cached_property
 
 from ClickSQL.conf.parse_rfc_1738_args import parse_rfc1738_args
 from ClickSQL.errors import ParameterKeyError, ParameterTypeError, DatabaseTypeError, DatabaseError, \
@@ -427,7 +427,7 @@ class ClickHouseTableNode(ClickHouseBaseNode):
         res = self.execute(sql, convert_to='dataframe').values.ravel().tolist()
         return res
 
-    @property
+    @cached_property
     def databases(self):
         """
         show databases
