@@ -3,12 +3,13 @@ import unittest
 import pandas as pd
 import numpy as np
 from ClickSQL.clickhouse.ClickHouseCreate import TableEngineCreator, ClickHouseTableExistsError
+
 conn = 'clickhouse://default:12345@xxx.xxx.xxx.xxx:8123/test.test'
+
 
 class MyTestCase(unittest.TestCase):
     @staticmethod
     def connection():
-
         fdg = TableEngineCreator(conn_str=conn)
 
         # self.assertIsInstance(fdg, TableEngineCreator)
