@@ -4,14 +4,16 @@ import re
 
 from ClickSQL.clickhouse.ClickHouse import ClickHouseTableNode
 from ClickSQL.errors import ClickHouseTableExistsError, ParameterTypeError
+import warnings
 
 
 class SQLBuilder(object):
 
     @staticmethod
     def _assemble_sample(sample=None) -> str:
+        warnings.warn('currently sampling is not supported!')
         sample_clause = '' if sample is None else f'SAMPLE {sample}'
-        return sample_clause
+        return ''
 
     @staticmethod
     def _assemble_array_join(array_join_list: (list, tuple, None) = None) -> str:
@@ -130,18 +132,20 @@ class SQLBuilder(object):
         sql = f"{main_body} {join} {where_conditions} {order_limit}"
         return sql
 
+
+
     @classmethod
-    def selector(cls, db_table: str, cols: list,
-                 sample: (int, float, None) = None,
-                 array_join: (list, None) = None,
-                 join: (dict, None) = None,
-                 prewhere: (list, None) = None,
-                 where: (list, None) = None,
-                 having: (list, None) = None,
-                 group_by: (list, None) = None,
-                 order_by: (list, None) = None,
-                 limit_by: (dict, None) = None,
-                 limit: (int, None) = None) -> str:
+    def select(cls, db_table: str, cols: list,
+               sample: (int, float, None) = None,
+               array_join: (list, None) = None,
+               join: (dict, None) = None,
+               prewhere: (list, None) = None,
+               where: (list, None) = None,
+               having: (list, None) = None,
+               group_by: (list, None) = None,
+               order_by: (list, None) = None,
+               limit_by: (dict, None) = None,
+               limit: (int, None) = None) -> str:
         """
 
         :param having: str ["r1 >1 and r2 <2"]
@@ -640,7 +644,7 @@ class CreateTableUtils(CreateTableFromInfoUtils, CreateTableFromSQLUtils):
         return sql
 
 
-class TableEngineCreator(ClickHouseTableNode, CreateTableUtils):
+class TableEngineCreator(ClickHouseTableNode, CreateTableUtils, SQLBuilder):
     def __init__(self, conn_str: (str, None) = None, **kwarg):
         super(TableEngineCreator, self).__init__(conn_str=conn_str, **kwarg)
 
