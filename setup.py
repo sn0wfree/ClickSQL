@@ -37,6 +37,6 @@ setup(
 
     packages=find_packages(exclude=['dist', 'doc', 'ClickSQL.egg-info']),
     include_package_data=True,
-    install_requires=read_requirements('requirements.txt'),  # 指定需要安装的依赖,
+    setup_requires=read_requirements('requirements.txt'),  # 指定需要安装的依赖,
 
 )
