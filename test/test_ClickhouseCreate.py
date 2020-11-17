@@ -199,7 +199,7 @@ class MyTestCase(unittest.TestCase):
                         limit_by=None,
                         limit=None)
 
-        res = 'SELECT test1 FROM test.test           '
+        res = 'SELECT g FROM test.test  ARRAY JOIN test1 as g'
         # print(out)
         self.assertEqual(out.strip(), res.strip())
 

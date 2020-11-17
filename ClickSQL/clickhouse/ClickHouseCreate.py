@@ -27,18 +27,22 @@ class SQLBuilder(object):
         if join_info_dict is None:
             join_clause = ''
         elif isinstance(join_info_dict, dict):
-            join_type = join_info_dict.get('type')
+            join_type = join_info_dict.get('type', None)
+            sql = join_info_dict.get('sql', None)
             if join_type is None:
                 raise ValueError('join_info_dict cannot locate join_type condition')
+            if sql is None:
+                raise ValueError('join_info_dict cannot locate sql clause')
+
             on_ = join_info_dict.get('ON')
             if on_ is None:
                 using_ = join_info_dict.get('USING')
                 if using_ is None:
                     raise ValueError('join_info_dict cannot locate ON or USING condition')
                 else:
-                    join_clause = f'{join_type} USING ({using_})'
+                    join_clause = f'{join_type} ({sql}) USING ({using_})'
             else:
-                join_clause = f'{join_type} ON {on_}'
+                join_clause = f'{join_type} ({sql}) ON {on_}'
         else:
             raise ValueError('join_info_dict must accept dict or None')
         return join_clause
@@ -129,13 +133,11 @@ class SQLBuilder(object):
         join = f"{array_join_clause} {join_clause}"
         where_conditions = f"{prewhere_clause} {where_clause} {group_by_clause} {having_clause} "
         order_limit = f"{order_by_clause} {limit_n_clause} {limit_clause}"
-        sql = f"{main_body} {join} {where_conditions} {order_limit}"
+        sql = f"{main_body} {join} {where_conditions} {order_limit} SETTINGS joined_subquery_requires_alias=0"
         return sql
 
-
-
     @classmethod
-    def select(cls, db_table: str, cols: list,
+    def select(cls, db_table: str, cols: (list, str,None)=None,
                sample: (int, float, None) = None,
                array_join: (list, None) = None,
                join: (dict, None) = None,
@@ -153,7 +155,7 @@ class SQLBuilder(object):
         :param cols: list [ r1,r2,r3 ]
         :param sample: str 0.1 or 1000
         :param array_join: list ['arrayA as a','arrayB as b']
-        :param join: dict {'type':'all left join','USING' : "r1,r2"}
+        :param join: dict {'type':'all left join','USING' : "r1,r2",'sql':'select * from test'}
         :param prewhere: str ["r1 >1" , "r2 <2"]
         :param where: str ["r1 >1.5" , "r2 <1.3"]
         :param group_by: list ['r1','r2']
@@ -162,8 +164,14 @@ class SQLBuilder(object):
         :param limit: int 100
         :return:  str
         """
-
-        SELECT_CLAUSE = ','.join(cols)
+        if isinstance(cols, str):
+            SELECT_CLAUSE = cols
+        elif isinstance(cols, list):
+            SELECT_CLAUSE = ','.join(cols)
+        elif cols is None:
+            cols = '*'
+        else:
+            raise ValueError('cols only accept str or list')
         SAMPLE_CLAUSE = cls._assemble_sample(sample=sample)
         ARRAY_JOIN_CLAUSE = cls._assemble_array_join(array_join_list=array_join)
         JOIN_CLAUSE = cls._assemble_join(join)
