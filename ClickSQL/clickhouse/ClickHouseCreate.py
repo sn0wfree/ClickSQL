@@ -137,7 +137,8 @@ class SQLBuilder(object):
         return sql
 
     @classmethod
-    def select(cls, db_table: str, cols: (list, str,None)=None,
+    def select(cls, db_table: str,
+               cols: (list, str, None) = None,
                sample: (int, float, None) = None,
                array_join: (list, None) = None,
                join: (dict, None) = None,
@@ -165,11 +166,11 @@ class SQLBuilder(object):
         :return:  str
         """
         if isinstance(cols, str):
-            SELECT_CLAUSE = cols
+            select_clause = cols
         elif isinstance(cols, list):
-            SELECT_CLAUSE = ','.join(cols)
+            select_clause = ','.join(cols)
         elif cols is None:
-            cols = '*'
+            select_clause = '*'
         else:
             raise ValueError('cols only accept str or list')
         SAMPLE_CLAUSE = cls._assemble_sample(sample=sample)
@@ -183,7 +184,7 @@ class SQLBuilder(object):
         LIMIT_N_CLAUSE = cls._assemble_limit_by(limit_by)
         LIMIT_CLAUSE = cls._assemble_limit(limit)
 
-        return cls.raw_create_select_sql(SELECT_CLAUSE, db_table, SAMPLE_CLAUSE, ARRAY_JOIN_CLAUSE, JOIN_CLAUSE,
+        return cls.raw_create_select_sql(select_clause, db_table, SAMPLE_CLAUSE, ARRAY_JOIN_CLAUSE, JOIN_CLAUSE,
                                          PREWHERE_CLAUSE, WHERE_CLAUSE, GROUP_BY_CLAUSE, HAVING_CLAUSE, ORDER_BY_CLAUSE,
                                          LIMIT_N_CLAUSE, LIMIT_CLAUSE)
 

@@ -68,8 +68,12 @@ class ClickHouseTableNodeExt(TableEngineCreator):
             cols = set(cols)
         if order_by_cols is None:
             order_by_clause = ''
-        else:
+        elif len(order_by_cols) > 1:
             order_by_clause = f" order by ({','.join(order_by_cols)})"
+        elif len(order_by_cols) == 1:
+            order_by_clause = f" order by {','.join(order_by_cols)}"
+        else:
+            raise ValueError('order_by_cols get wrong length')
         sql = f"select {','.join(cols)} from {db_table} where {' and '.join(sorted(set(['1'] + list(filter_yield))))} {order_by_clause}"
         return sql
 
@@ -77,13 +81,13 @@ class ClickHouseTableNodeExt(TableEngineCreator):
         return self.query(sql, **kwargs)
         # self.__execute__ = self.operator.query
 
-    @staticmethod
-    def _check_end_with_limit(string, pattern=r'[\s]+limit[\s]+[0-9]+$'):
-        m = re.findall(pattern, string)
-        if m is None or m == []:
-            return False
-        else:
-            return True
+    # @staticmethod
+    # def _check_end_with_limit(string, pattern=r'[\s]+limit[\s]+[0-9]+$'):
+    #     m = re.findall(pattern, string)
+    #     if m is None or m == []:
+    #         return False
+    #     else:
+    #         return True
 
 
 if __name__ == '__main__':

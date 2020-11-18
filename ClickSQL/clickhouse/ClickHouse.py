@@ -325,7 +325,7 @@ class ClickHouseBaseNode(ClickHouseTools):
         :param loop:
         :return:
         """
-        # TODO change to smart mode, can receive any kind sql combination and handle them
+
         # detect whether all query are insert process
         # insert_process = map(lambda x: x.lower().startswith(available_queries_insert), sql)
         # # detect whether all query are select process
@@ -335,7 +335,7 @@ class ClickHouseBaseNode(ClickHouseTools):
         # elif all(list(insert_process)) is True:
         #     to_df = transfer_sql_format = False
         # else:
-        #     # TODO change to smart mode, can receive any kind sql combination and handle them
+        #
         #     raise ValueError(
         #         'the list of queries must be same type query! currently cannot handle various kind SQL type'
         #         'combination')

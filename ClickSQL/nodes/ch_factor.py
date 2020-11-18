@@ -1,10 +1,12 @@
 # coding=utf-8
 import copy
-import re
-from collections import namedtuple, ChainMap
-from ClickSQL.errors import ClickHouseTableExistsError, ParameterTypeError, ClickHouseTableNotExistsError
-from ClickSQL.clickhouse.ClickHouseExt import ClickHouseTableNodeExt
+import warnings
+from collections import namedtuple
 
+from ClickSQL.clickhouse.ClickHouseExt import ClickHouseTableNodeExt
+from ClickSQL.errors import ClickHouseTableNotExistsError
+
+complex_sql_select_count = 4
 factor_parameters = ('dt', 'code', 'value', 'fid')
 ft_node = namedtuple('factortable', factor_parameters)
 
@@ -28,31 +30,36 @@ ft_node = namedtuple('factortable', factor_parameters)
 
 
 class BaseSingleFactorBaseNode(object):
+    """
+    init operator
+    and set fid_ck,dt_max_1st,execute,no_self_update for update functions
+    kwargs is the conditions for select
+    """
     __Name__ = "基础因子库单因子基类"
     __slots__ = (
         'operator', 'db', 'table', 'db_table', '_kwargs', '_raw_kwargs', 'status', '_INFO', 'depend_tables',
         '_fid_ck', '_dt_max_1st', '_execute', '_no_self_update'
     )
 
-    def __init__(self, src: str, db_table: (None, str) = None, info=None,
-                 fid_ck: str = 'fid',
-                 dt_max_1st: bool = True,
-                 execute: bool = False,
-                 no_self_update: bool = True, **kwargs):
+    def __init__(self, src: str, db_table: (None, str) = None, info=None, **kwargs):
         """
 
         :type kwargs: object
         :param src: string sample: clickhouse://test:sysy@199.199.199.199:1234/drre
         :param db_table:
         :param info:
-        :param kwargs:  data_filter will store operator for some cols
+        :param kwargs:  data_filter will store operator for some cols:
+                { cols: (tuple, None, list) = None,
+                 order_by_cols: (list, tuple, None) = None,
+                 data_filter: dict = {}, include_filter=True,
+                 **other_filters}
+
+
+
+
         """
 
         self.operator = ClickHouseTableNodeExt(src)
-        self._fid_ck = fid_ck
-        self._dt_max_1st = dt_max_1st
-        self._execute = execute
-        self._no_self_update = no_self_update
 
         # self._execute = self._operator._execute
 
@@ -101,7 +108,9 @@ class BaseSingleFactorBaseNode(object):
         """
         Returns length of info axis, but here we use the index.
         """
-        return self.rows
+        sql = f"select count(1) as rows from ({self.__sql__})"
+        rows = self.operator(sql)['rows'].values[0]
+        return rows
 
     @property
     def __sql__(self):
@@ -112,6 +121,11 @@ class BaseSingleFactorBaseNode(object):
         return hash(self.__sql__)
 
     def __getitem__(self, key: (list, str)):
+        """
+        directly execute
+        :param key:
+        :return:
+        """
         if isinstance(key, list):
             sql = f"select {','.join(key)} from ({self.__sql__})"
             return self.operator(sql)
@@ -122,54 +136,18 @@ class BaseSingleFactorBaseNode(object):
             raise ValueError('key only accept list or str')
 
     @property
-    def shape(self):
-        """
-        shape like pandas
-
-        :return:
-        """
-
-        return self.rows, self.cols
-
-    @property
-    def dtypes(self):
-        sql = f"desc ({self.__sql__})"
-        dtypes = self.operator(sql)
-        return dtypes
-
-    @property
-    def cols(self):
-        return self.dtypes.shape[0]
-
-    @property
-    def rows(self):
-        sql = f"select count(1) as rows from ({self.__sql__})"
-        rows = self.operator(sql)['rows'].values[0]
-        return rows
-
-    @property
-    def empty(self):
-        return self.total_rows == 0
-
-    @property
-    def total_rows(self):
-        """
-        return row count
-        :return:
-        """
-
-        # sql = f"-- select count(1) as row_count from {self.db_table}"
-        temp = self.__system_tables__
-        if not temp.empty:
-            return temp['total_rows'].values[0]
-        else:
-            raise ClickHouseTableNotExistsError(f'{self.db_table} is not exists!')
-
-    @property
     def __system_tables__(self):
         sql = f"select total_rows,engine from system.tables where database ='{self.db}' and name='{self.table}'"
         res = self.operator(sql)
         return res
+
+    def _detect_complex_sql(self, warn=False):
+        sql = self.__sql__.lower()
+        if 'select' in sql and len(sql.split('select ')) >= complex_sql_select_count:
+            if warn:
+                warnings.warn('this sql may be a complex sql!')
+            else:
+                raise ValueError('this sql may be a complex sql!')
 
     @property
     def table_exist(self):
@@ -197,6 +175,7 @@ class BaseSingleFactorBaseNode(object):
         :return:
         """
         sql = self.__sql__
+        self._detect_complex_sql()
         end_with_limit = self.operator._check_end_with_limit(sql, pattern=pattern)
         if end_with_limit:
             return self.operator(sql)
@@ -208,7 +187,7 @@ class BaseSingleFactorBaseNode(object):
         fetch all data
         :return:
         """
-
+        self._detect_complex_sql()
         return self.operator(self.__sql__)
 
     # def __call__(self, **kwargs):
@@ -236,6 +215,52 @@ class BaseSingleFactorNode(BaseSingleFactorBaseNode):
 
     def __init__(self, *args, **kwargs):
         super(BaseSingleFactorNode, self).__init__(*args, **kwargs)
+
+    @property
+    def shape(self):
+        """
+        shape like pandas
+
+        :return:
+        """
+
+        return self.row_count, self.col_count
+
+    @property
+    def dtypes(self):
+        sql = f"desc ({self.__sql__})"
+        dtypes = self.operator(sql)
+        return dtypes
+
+    @property
+    def columns(self):
+        return self.dtypes['name'].values.tolis()
+
+    @property
+    def col_count(self):
+        return self.dtypes.shape[0]
+
+    @property
+    def row_count(self):
+        return self.__len__()
+
+    @property
+    def empty(self):
+        return self.total_rows == 0
+
+    @property
+    def total_rows(self):
+        """
+        return row count
+        :return:
+        """
+
+        # sql = f"-- select count(1) as row_count from {self.db_table}"
+        temp = self.__system_tables__
+        if not temp.empty:
+            return temp['total_rows'].values[0]
+        else:
+            raise ClickHouseTableNotExistsError(f'{self.db_table} is not exists!')
 
 
 class UpdateSQLUtils(object):
@@ -277,7 +302,102 @@ class UpdateSQLUtils(object):
         return insert_sql
 
 
-class BaseSingleFactorTableNode(BaseSingleFactorNode):
+class GroupSQLUtils(object):
+    @staticmethod
+    def group_top(sql: str, by: (str, list, tuple), top=5, cols: (str, None) = None):
+        if isinstance(by, str):
+            by = [by]
+        if cols is None:
+            cols = '*'
+        gt_sql = f"select {cols} from ({sql})  limit {top} by {','.join(by)} "
+        return gt_sql
+
+    # group table
+    @staticmethod
+    def group_by(db_table_or_sql: str,
+                 by: (str, list, tuple),
+                 apply_func: (list,),
+                 having: (list, tuple, None) = None):
+        if isinstance(by, str):
+            by = [by]
+            group_by_clause = f"group by {by}"
+        elif isinstance(by, (list, tuple)):
+            group_by_clause = f"group by ({','.join(by)})"
+        else:
+            raise ValueError(f'by only accept str list tuple! but get {type(by)}')
+        # db_table_or_sql = sql
+        if having is None:
+            having_clause = ''
+        elif isinstance(having, (list, tuple)):
+            having_clause = 'having ' + " and ".join(having)
+        else:
+            raise ValueError(f'having only accept list,tuple,None! but get {type(having)}')
+        sql = f"select  {','.join(by + apply_func)}  from ({db_table_or_sql}) {group_by_clause} {having_clause} "
+        # if execute:
+        #     self.operator(sql)
+        # else:
+        return sql
+
+
+class MergeSQLUtils(object):
+    # merge table
+    @staticmethod
+    def _merge(first: BaseSingleFactorNode,
+               seconds: (str, BaseSingleFactorNode),
+               using: (list, str, tuple),
+               cols: (list, str, None) = None,
+               join_type='all full join',
+
+               # cols: list,
+               #  sample: (int, float, None) = None,
+               #  array_join: (list, None) = None,
+               #  join: (dict, None) = None,
+               #  prewhere: (list, None) = None,
+               #  where: (list, None) = None,
+               #  having: (list, None) = None,
+               #  group_by: (list, None) = None,
+               #  order_by: (list, None) = None,
+               #  limit_by: (dict, None) = None,
+               #  limit: (int, None) = None
+               ) -> str:
+        # self._complex = True
+        if isinstance(using, (list, tuple)):
+            using = ','.join(using)
+
+        join = {'type': join_type, 'USING': using, 'sql': str(seconds)}
+        sql = ClickHouseTableNodeExt.select(str(first), cols, join=join, limit=None)
+        # if execute:
+        #     return self.operator(sql)
+        # else:
+        return sql
+
+
+class BaseSingleFactorTableNode(BaseSingleFactorNode, MergeSQLUtils):
+    __slots__ = (
+        'operator', 'db', 'table', 'db_table', '_kwargs', '_raw_kwargs', 'status', '_INFO', 'depend_tables',
+        '_fid_ck', '_dt_max_1st', '_execute', '_no_self_update', '_complex'
+    )
+
+    def __init__(self, src: str, db_table: (None, str) = None, info=None,
+                 fid_ck: str = 'fid',
+                 dt_max_1st: bool = True,
+                 execute: bool = False,
+                 no_self_update: bool = True, **kwargs):
+        super(BaseSingleFactorTableNode, self).__init__(src, db_table=db_table, info=info, **kwargs)
+        self._complex = False
+        self._fid_ck = fid_ck
+        self._dt_max_1st = dt_max_1st
+        self._execute = execute
+        self._no_self_update = no_self_update
+
+    def merge(self, seconds, using: (list, str, tuple), join_type='all full join',
+              cols: (list, str, None) = None, ):
+        if seconds.lower().startswith('select'):
+            pass
+        else:
+            seconds = f" select * from {seconds}"
+        sql = self._merge(self, seconds, using=using, join_type=join_type, cols=cols)
+        return sql
 
     def __call__(self, sql, **kwargs):
         return self.operator(sql, **kwargs)
@@ -322,10 +442,6 @@ class BaseSingleFactorTableNode(BaseSingleFactorNode):
         UpdateSQLUtils
 
         :param dst_db_table:
-        :param fid_ck:
-        :param dt_max_1st:
-        :param execute:
-        :param no_self_update:
         :return:
         """
         # print('rshift')
@@ -362,77 +478,28 @@ class BaseSingleFactorTableNode(BaseSingleFactorNode):
             self.operator(sql)
         return sql, update_status
 
-    # group table
-    def groupby(obj, by: (str, list, tuple), apply_func: (list,),
-                having: (list, tuple, None) = None, execute=False):
-        if isinstance(by, str):
-            by = [by]
-            group_by_clause = f"group by {by}"
-        elif isinstance(by, (list, tuple)):
-            group_by_clause = f"group by ({','.join(by)})"
-        else:
-            raise ValueError(f'by only accept str list tuple! but get {type(by)}')
-        db_table_or_sql = obj.__sql__
-        if having is None:
-            having_clause = ''
-        elif isinstance(having, (list, tuple)):
-            having_clause = 'having ' + " and ".join(having)
-        else:
-            raise ValueError(f'having only accept list,tuple,None! but get {type(having)}')
-
-        sql = f"select  {','.join(by + apply_func)}  from ({db_table_or_sql}) {group_by_clause} {having_clause} "
-        if execute:
-            obj.operator(sql)
-        else:
-            return sql
-
-    # merge table
-    def merge(self, db_table: (str, BaseSingleFactorNode),
-              using: (list, str, tuple),
-              cols: (list, str, None) = None,
-              join_type='all full join',
-              execute=False
-
-              # cols: list,
-              #  sample: (int, float, None) = None,
-              #  array_join: (list, None) = None,
-              #  join: (dict, None) = None,
-              #  prewhere: (list, None) = None,
-              #  where: (list, None) = None,
-              #  having: (list, None) = None,
-              #  group_by: (list, None) = None,
-              #  order_by: (list, None) = None,
-              #  limit_by: (dict, None) = None,
-              #  limit: (int, None) = None
-              ) -> str:
-        if isinstance(using, (list, tuple)):
-            using = ','.join(using)
-
-        join = {'type': join_type, 'USING': using, 'sql': str(db_table)}
-        sql = self.operator.select(str(self), cols, join=join, limit=None)
-        if execute:
-            return self.operator(sql)
-        else:
-            return sql
-
 
 ## https://zhuanlan.zhihu.com/p/297623539
 
 
 if __name__ == '__main__':
-    factor = BaseSingleFactorTableNode(
-        'clickhouse://default:Imsn0wfree@47.104.186.157:8123/test.test4',
-        cols=['test1']
+    v_st_dis_buy_info = BaseSingleFactorTableNode(
+        'clickhouse://default:Imsn0wfree@127.0.0.1:8123/sample.sample',
+        cols=['cust_no', 'product_id', 'money'],
+        order_by_cols=['money asc'],
+        money='money >= 1000000'
     )
 
     # factor >> 'test.test'
     # print(factor)
-    c = factor['test1']
+    c = v_st_dis_buy_info['money'].head(10)
     print(c)
+    # sql = v_st_dis_buy_info.merge('select cust_no, product_id, money as s from sample.sample where money >= 100000', using=['cust_no', 'product_id'])
+    # print(sql)
     # c = factor('show tables from raw')
     # c2 = factor.groupby(['test2'], apply_func=['sum(fid)'])
     # print(c2)
 
     # print(1 >> 2)
-    id
+
     pass

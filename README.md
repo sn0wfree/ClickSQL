@@ -58,6 +58,53 @@ ct.query('show tables from system limit 1')
 >>> 0  aggregate_function_combinators
 ```
 
+## update
+
+```python
+from ClickSQL import BaseSingleFactorTableNode as factortable
+
+factor = factortable(
+        'clickhouse://default:default@127.0.0.1:8123/sample.sample',
+        cols=['cust_no', 'product_id', 'money'],
+        order_by_cols=['money asc'],
+        money='money >= 100000'
+    )
+
+factor >> 'test.test'
+    
+
+```
+
+
+```python
+from ClickSQL import BaseSingleFactorTableNode
+
+factor = factortable(
+        'clickhouse://default:default@127.0.0.1:8123/sample.sample',
+        cols=['cust_no', 'product_id', 'money'],
+        order_by_cols=['money asc'],
+        money='money >= 100000'
+    )
+
+
+factor['money'].head(10)
+
+>>> connection test:  Ok.
+>>>        money
+>>> 0  1000000.0
+>>> 1  1000000.0
+>>> 2  1000000.0
+>>> 3  1000000.0
+>>> 4  1000000.0
+>>> 5  1000000.0
+>>> 6  1000000.0
+>>> 7  1000000.0
+>>> 8  1000000.0
+>>> 9  1000000.0
+
+
+```
+
 ### Contribution
 there is welcome to do more work to improve this package more convenient
 
