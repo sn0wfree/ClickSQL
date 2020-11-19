@@ -16,5 +16,6 @@ def boost_up(func, tasks, core=None, method='Process', chunksize=None, star=True
     pool.join()
     return h
 
-if __name__=='__main__':
+
+if __name__ == '__main__':
     pass
