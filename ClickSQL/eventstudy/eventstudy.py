@@ -1,35 +1,34 @@
 # coding=utf-8
-# coding=utf-8
-from ClickSQL.utils.file_cache import file_cache
+from collections import namedtuple
+from functools import partial
+
 import numpy as np
 import pandas as pd
 # import matplotlib.pyplot as plt
 # import seaborn as sns
 import statsmodels.api as sm
-import statsmodels.formula.api as smf
+from scipy.stats import t
 
-from collections import namedtuple
-from functools import partial
-from ClickSQL.utils.boost_up import boost_up
+from ClickSQL.utils import boost_up, cached_property
 
 # fig = plt.figure()
 # sns.set_palette("GnBu_d")
 # sns.set_style('whitegrid')
 
 
-evet_settings = namedtuple('event', ('before_event_window', 'event_window', 'prefix_event', 'gap'))
+event_settings = namedtuple('event', ('before_event_window', 'event_window', 'prefix_event', 'gap'))
+
 
 # fig = plt.figure()
 # sns.set_palette("GnBu_d")
 # sns.set_style('whitegrid')
 
-import yfinance as yf
+# import yfinance as yf
 
-##没有安装yahoo finance的话可以这样安装：
+## 没有安装yahoo finance的话可以这样安装：
 ## !pip install yfinance
 
-stock_list = ['AMZN', 'AAPL', 'TSLA', 'GE', 'GILD', 'BA', 'NFLX', 'MS',
-              'LNVGY', 'BABA', 'LK', 'JOBS', 'CEO', 'TSM', 'JD', '^GSPC']
+
 ## AMZN: 亚马逊,  AAPL: 苹果, TSLA: 特斯拉, GE: 通用电气, GILD: 吉利德（做瑞德西韦那个公司）,
 ## BA: 波音, NFLX: 网飞, MS: 大摩,
 ## LNVGY: 联想 BABA: 阿里巴巴, LK: 瑞幸, JOBS: 前程无忧, CEO: 中海油, TSM: 台积电, JD: 京东,
@@ -42,11 +41,6 @@ stock_list = ['AMZN', 'AAPL', 'TSLA', 'GE', 'GILD', 'BA', 'NFLX', 'MS',
 #     price_data = tickerData.history(period='1d', start='2019-1-1', end='2020-4-1')['Close']
 #     prices[stock] = price_data
 # return_df = prices.pct_change().dropna()
-firm_list = stock_list[:-1]
-date = ['2020-03-13', '2020-03-13', '2020-03-13', '2020-03-13', '2020-03-13', '2020-03-13', '2020-03-13', '2020-03-13',
-        '2020-01-23', '2020-01-23', '2020-01-23', '2020-01-23', '2020-01-23', '2020-01-23', '2020-01-23']
-date_df = pd.DataFrame(date, index=firm_list, columns=['Date'])
-date_df.index.name = 'CompanyName'
 
 
 #
@@ -54,19 +48,32 @@ date_df.index.name = 'CompanyName'
 # return_df['RF'] = 0.0065
 # return_df['Mkt_RF'] = return_df['^GSPC'] - return_df['RF']
 
-
-class EventStudy(object):
+class EventStudyUtils(object):
     @classmethod
-    @file_cache()
-    def cal_ar(cls, return_df: pd.DataFrame, event_dict: dict, date='Date', rf='RF',
-               factors=['Mkt_RF'], formula="{stock} ~ {rf} + {factors_str}",
-               event_info: tuple = (250, 20, 10, 1), ar_only=True, boost=True):
-        func = partial(cls.cal_ar_single,
-                       date=date,
-                       rf=rf, factors=factors,
-                       formula=formula,
-                       event_info=event_info,
-                       ar_only=ar_only)
+    def cal_residual(cls, return_df: pd.DataFrame, event_dict: dict, date='Date', rf='RF',
+                     factors=['Mkt_RF'], formula="{stock} ~ 1 + {factors_str}",
+                     event_info: tuple = (250, 20, 10, 1), ar_only=True, boost=True):
+
+        """
+        计算异常收益率并加总异常收益率(CAR)
+[公式] 计算的是股票 [公式] 在第 [公式] 天的异常收益率，为了研究事件对整体证券定价的影响，还需要计算平均异常收益率 [公式] 和累积异常收益率 [公式] 。
+通常而言，平均异常收益率是针对某一时点、对所有公司的异常收益率求平均，计算方式如下所示：
+
+[公式]
+
+        :param return_df:
+        :param event_dict:
+        :param date:
+        :param rf:
+        :param factors:
+        :param formula:
+        :param event_info:
+        :param ar_only:
+        :param boost:
+        :return:
+        """
+        func = partial(cls.cal_ar_single, date=date, rf=rf, factors=factors, formula=formula,
+                       event_info=event_info, ar_only=ar_only)
 
         tasks = ((return_df, event_happen_day, stock) for stock, event_happen_day in event_dict.items())
 
@@ -78,15 +85,17 @@ class EventStudy(object):
 
     @staticmethod
     def cal_ar_single(return_df: pd.DataFrame, event_happen_day: str, stock: str,
-                      date='Date', rf='RF', factors=['Mkt_RF'], formula="{stock} ~ {rf} + {factors_str}",
+                      date='Date', rf='RF', factors=['Mkt_RF'], formula="{stock} ~1 +  {factors_str}",
                       event_info: tuple = (250, 20, 10, 1), ar_only=True):
-        event_set = evet_settings(*event_info)
+        event_set = event_settings(*event_info)
 
         variables = [date, stock, rf] + factors
+        data = return_df[variables]
+        data[stock] = data.eval(f'{stock} - {rf}')
         suffix_event = event_set.event_window - event_set.prefix_event
 
-        event_index = int(return_df[return_df[date] == str(event_happen_day)].index.values)
-        estimation_df = return_df.loc[event_index - (
+        event_index = int(data[data[date] == str(event_happen_day)].index.values)
+        estimation_df = data.loc[event_index - (
                 event_set.before_event_window + event_set.prefix_event + event_set.gap): event_index - (
                 event_set.prefix_event + event_set.gap), variables]
 
@@ -99,7 +108,7 @@ class EventStudy(object):
         bse = models.bse
 
         # expected returns for each firm in the estimation window
-        event_df = return_df.loc[event_index - event_set.prefix_event: event_index + suffix_event,
+        event_df = data.loc[event_index - event_set.prefix_event: event_index + suffix_event,
                    variables].reset_index(drop=True)
 
         event_df[f'{stock}_er'] = np.dot(event_df[factors].values, beta_Mkt) + alpha
@@ -107,25 +116,153 @@ class EventStudy(object):
         event_df.index = event_df.index - event_set.prefix_event
         if ar_only:
             output_cols = [f'{stock}_ar']
-            #             resistd = event_df[f'{stock}_abnormal_return'].std() / corp_count
-
-            #             resistd = event_df[f'{stock}_abnormal_return'].std() / corp_count
-
             return event_df[output_cols]
         else:
             return event_df
 
-    @staticmethod
-    def cal_aar(ar_df: pd.DataFrame):
-        aar_df = pd.DataFrame(ar_df.mean(axis=1), columns=['aar'])
-        return aar_df
+    # @staticmethod
+    # def cal_aar(ar_df: pd.DataFrame) -> pd.Series:
+    #     """
+    #
+    #     :param ar_df:
+    #     :return:
+    #     """
+    #     aar_series = pd.DataFrame(ar_df.mean(axis=1), columns=['aar'])
+    #
+    #     return aar_series
 
-    @staticmethod
-    def cal_car(ar_df: pd.DataFrame):
-        return ar_df.sum(axis=1)
-    @staticmethod
-    def cal_caar(aar_df: pd.DataFrame):
-        return aar_df.sum()
+    # @staticmethod
+    # def cal_car(ar_df: pd.DataFrame) -> pd.Series:
+    #     """
+    #
+    #     :param ar_df:
+    #     :return:
+    #     """
+    #
+    #     # car_series = pd.DataFrame(ar_df.sum(axis=0), columns=['car'])
+    #     return ar_df.cumsum()
+
+    # @staticmethod
+    # def cal_caar(aar_df: pd.DataFrame):
+    #     """
+    #
+    #     :param aar_df:
+    #     :return:
+    #     """
+    #
+    #     return aar_df.sum()
+
+
+class EventStudy(EventStudyUtils):
+    def __init__(self, return_df: pd.DataFrame, event_dict: dict, date='Date', rf='RF',
+                 factors=['Mkt_RF'], formula="{stock} ~ {rf} + {factors_str}",
+                 event_info: tuple = (250, 20, 10, 1), ar_only=True, boost=True):
+        """
+        >>>  es = EventStudy(return_df,event_dict=event_dict,date='Date',rf='RF', factors=['Mkt_RF'],
+                             formula="{stock} ~ 1 + {factors_str}",event_info=(250, 10, 5, 1))
+
+        >>> es.result
+                      ar    var_ar       car   var_car t_statistic  p_values
+            -5 -0.005464  0.000102 -0.005464  0.000102 -0.540883  0.294536
+            -4 -0.002986  0.000102 -0.008450  0.000204 -0.591467  0.277372
+            -3 -0.004987  0.000102 -0.013437  0.000306 -0.767973  0.221615
+            -2 -0.011591  0.000102 -0.025028  0.000408 -1.238760  0.108300
+            -1 -0.006547  0.000102 -0.031576  0.000510 -1.397834  0.081703
+            0  -0.020056  0.000102 -0.051632  0.000612 -2.086547  0.018973
+            1  -0.005131  0.000102 -0.056763  0.000714 -2.123751  0.017339
+            2  -0.027366  0.000102 -0.084129  0.000816 -2.944349  0.001771
+            3   0.004946  0.000102 -0.079183  0.000918 -2.612757  0.004764
+            4   0.007692  0.000102 -0.071491  0.001021 -2.237908  0.013056
+            5  -0.001437  0.000102 -0.072928  0.001123 -2.176649  0.015223
+
+
+
+
+        :param return_df:
+        :param event_dict:
+        :param date:
+        :param rf:
+        :param factors:
+        :param formula:
+        :param event_info:
+        :param ar_only:
+        :param boost:
+        """
+        self.data = return_df
+        self.event_dict = event_dict
+        self.cols = dict(date=date, rf=rf, factors=factors)
+        self.formula = formula
+        self.event_info = event_info
+        self.ar_only = ar_only
+        self.boost = boost
+        self.aar = self.ar
+
+    @cached_property
+    def residual(self):
+        return self.cal_residual(self.data, self.event_dict, date=self.cols['date'], rf=self.cols['rf'],
+                                 factors=self.cols['factors'], formula=self.formula,
+                                 event_info=self.event_info, ar_only=self.ar_only, boost=self.boost)
+
+    @cached_property
+    def ar(self):
+        """
+            Cross-sectional aggregation
+         the cross-sectional mean abnormal return for any period t
+
+
+        :return:
+        """
+        return self.residual.mean(axis=1)
+
+    @cached_property
+    def std_ar(self):
+        return self.ar.std()
+
+    @cached_property
+    def var_ar(self):
+        return self.ar.var()
+
+    @cached_property
+    def t_stats(self):
+        return self.car.squeeze() / np.sqrt(self.var_car)
+
+    @cached_property
+    def p_value(self):
+        return 1.0 - t.cdf(abs(self.t_stats), event_settings(*self.event_info).before_event_window - 1)
+
+    @cached_property
+    def var_car(self):
+        """
+
+        σ , = Lσ(AR)
+
+        :return:
+        """
+
+        return [(i * var) for i, var in enumerate([self.var_ar] * self.ar.shape[0], 1)]
+
+    #
+    @cached_property
+    def car(self):
+        """
+
+        The cumulative average residual method (CAR) uses as the abnormal performance measure
+        the sum of each month’s average abnormal performance
+
+        :return:
+        """
+        return pd.DataFrame(self.ar).cumsum()
+
+    @cached_property
+    def result(self):
+        p = self.p_value
+        t_statistic = self.t_stats.tolist()
+        ar = self.ar.tolist()
+        var_ar = [self.var_ar] * len(ar)
+        car = self.car.squeeze()
+        var_car = self.var_car
+        return pd.DataFrame([ar, var_ar, car, var_car, t_statistic, p], columns=car.index,
+                            index=['ar', 'var_ar', 'car', 'var_car', 't_stats', 'p_values']).T
 
 
 #
@@ -269,15 +406,32 @@ class EventStudy(object):
 # # plt.title("Cumulative Average Abnormal Return")
 
 if __name__ == '__main__':
-    return_df = pd.read_pickle('data.pkl').reset_index()
+    stock_list = ['AMZN', 'AAPL', 'TSLA', 'GE', 'GILD', 'BA', 'NFLX', 'MS',
+                  'LNVGY', 'BABA', 'LK', 'JOBS', 'CEO', 'TSM', 'JD', '^GSPC']
+    firm_list = stock_list[:-1]
+    date = ['2020-03-13', '2020-03-13', '2020-03-13', '2020-03-13', '2020-03-13', '2020-03-13', '2020-03-13',
+            '2020-03-13', '2020-01-23', '2020-01-23', '2020-01-23', '2020-01-23', '2020-01-23', '2020-01-23',
+            '2020-01-23']
+    date_df = pd.DataFrame(date, index=firm_list, columns=['Date'])
+    date_df.index.name = 'CompanyName'
+
+    return_df = pd.read_csv('data.csv')
     event_dict = date_df.to_dict()['Date']
-    ar_df = EventStudy.cal_ar(return_df,
-                              event_dict=event_dict,
-                              date='Date',
-                              rf='RF', factors=['Mkt_RF'],
-                              formula="{stock} ~ {rf} + {factors_str}",
-                              event_info=(250, 20, 10, 1), ar_only=True, boost=True)
-    aar_df = EventStudy.cal_aar(ar_df)
-    car_df = EventStudy.cal_car(ar_df)
-    print(car_df)
+    es = EventStudy(return_df, event_dict=event_dict, date='Date', rf='RF', factors=['Mkt_RF'],
+                    formula="{stock} ~ 1 + {factors_str}", event_info=(250, 10, 5, 1), ar_only=True, boost=True)
+    # aar_df = EventStudy.cal_aar(es.ar)
+    # car_series = EventStudy.cal_car(es.ar)
+
+    # mean_AAR = es.ar
+    # var_AAR = es.var_residual
+    # var_matrix = pd.DataFrame(var_AAR)
+    # var_matrix = var_matrix.T
+    # var_AAR2 = sum(var_matrix.iloc[0]) / 15 ** 2
+    # Std_AAR = np.sqrt(var_AAR2)
+
+    res = es.result
+    # np.sqrt(ar.iloc[:,9-1].std()**2/17)*1.96
+    # print(es.aar)
+
+    print(res)
     pass
