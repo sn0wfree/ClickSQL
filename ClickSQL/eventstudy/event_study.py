@@ -16,7 +16,7 @@ from ClickSQL.utils import boost_up, cached_property
 # sns.set_style('whitegrid')
 
 
-event_settings = namedtuple('event', ('before_event_window', 'event_window', 'prefix_event', 'gap'))
+event_tuple = namedtuple('event', ('before_event_window', 'event_window', 'prefix_event', 'gap'))
 
 
 # fig = plt.figure()
@@ -87,7 +87,7 @@ class EventStudyUtils(object):
     def cal_ar_single(return_df: pd.DataFrame, event_happen_day: str, stock: str,
                       date='Date', rf='RF', factors=['Mkt_RF'], formula="{stock} ~1 +  {factors_str}",
                       event_info: tuple = (250, 20, 10, 1), ar_only=True):
-        event_set = event_settings(*event_info)
+        event_set = event_tuple(*event_info)
 
         variables = [date, stock, rf] + factors
         data = return_df[variables]
@@ -228,7 +228,7 @@ class EventStudy(EventStudyUtils):
 
     @cached_property
     def p_value(self):
-        return 1.0 - t.cdf(abs(self.t_stats), event_settings(*self.event_info).before_event_window - 1)
+        return 1.0 - t.cdf(abs(self.t_stats), event_tuple(*self.event_info).before_event_window - 1)
 
     @cached_property
     def var_car(self):

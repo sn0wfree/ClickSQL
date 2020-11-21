@@ -169,7 +169,7 @@ class BaseSingleFactorBaseNode(object):
         else:
             raise ClickHouseTableNotExistsError(f'{self.db_table} is not exists!')
 
-    def fetch(self, pattern=r'[\s]+limit[\s]+[0-9]+$'):
+    def fetch(self, pattern=r'[\s]+limit[\s]+[0-9]+$', **kwargs):
         """
         fetch first 1000 line
         :return:
@@ -178,17 +178,20 @@ class BaseSingleFactorBaseNode(object):
         self._detect_complex_sql()
         end_with_limit = self.operator._check_end_with_limit(sql, pattern=pattern)
         if end_with_limit:
-            return self.operator(sql)
+            return self.operator(sql, **kwargs)
         else:
-            return self.operator(sql + ' limit 1000')
+            try:
+                return self.operator(sql + ' limit 1000', **kwargs)
+            except Exception as e:
+                return self.operator(sql, **kwargs)
 
-    def fetch_all(self):
+    def fetch_all(self, **kwargs):
         """
         fetch all data
         :return:
         """
         self._detect_complex_sql()
-        return self.operator(self.__sql__)
+        return self.operator(self.__sql__, **kwargs)
 
     # def __call__(self, **kwargs):
     #     """
