@@ -7,4 +7,4 @@ from ClickSQL.nodes.ch_factor import BaseSingleFactorTableNode
 
 __version__ = '0.1.6'
 __author__ = 'sn0wfree'
-__all__ = ['ClickHouseTableNode', 'ClickHouseTableNodeExt','BaseSingleFactorTableNode']
+__all__ = ['ClickHouseTableNode', 'ClickHouseTableNodeExt', 'BaseSingleFactorTableNode']

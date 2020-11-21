@@ -414,7 +414,7 @@ if __name__ == '__main__':
             '2020-01-23']
     date_df = pd.DataFrame(date, index=firm_list, columns=['Date'])
     date_df.index.name = 'CompanyName'
-
+    #
     return_df = pd.read_csv('data.csv')
     event_dict = date_df.to_dict()['Date']
     es = EventStudy(return_df, event_dict=event_dict, date='Date', rf='RF', factors=['Mkt_RF'],
