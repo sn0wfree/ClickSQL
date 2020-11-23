@@ -1,5 +1,5 @@
 # coding=utf-8
-from ClickSQL.nodes.ch_factor import BaseSingleFactorTableNode
+from ClickSQL.nodes.factor_node import BaseSingleFactorTableNode
 
 es_data = BaseSingleFactorTableNode(
     'clickhouse://default:Imsn0wfree@47.104.186.157:8123/event_study.es',

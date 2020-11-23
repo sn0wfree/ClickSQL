@@ -490,8 +490,9 @@ if __name__ == '__main__':
         'clickhouse://default:Imsn0wfree@47.104.186.157:8123/raw.v_st_dis_buy_info',
         cols=['cust_no', 'product_id', 'money'],
         order_by_cols=['money asc'],
-        money='money >= 1000000',limit = 'limit 10'
+        money='money >= 1000000', limit='limit 10'
     )
+    print(v_st_dis_buy_info)
 
     # factor >> 'test.test'
     # print(factor)
