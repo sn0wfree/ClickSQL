@@ -237,7 +237,7 @@ class BaseSingleFactorNode(BaseSingleFactorBaseNode):
 
     @property
     def columns(self):
-        return self.dtypes['name'].values.tolis()
+        return self.dtypes['name'].values.tolist()
 
     @property
     def col_count(self):

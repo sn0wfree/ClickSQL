@@ -58,7 +58,7 @@ class ClickHouseTableNodeExt(TableEngineCreator):
         :return:
         """
         if cols is None:
-            cols = factor_parameters
+            cols = ['*']
         elif len(cols) == 0:
             cols = ['*']
         conditions = ChainMap(data_filter, *list(cls.__obtain_other_filter__(other_filters)))
