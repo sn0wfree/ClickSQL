@@ -24,7 +24,7 @@ def read_requirements(filename):
 setup(
     name="ClickSQL",
     version=__version__,
-    python_requires='>=3.7.0',  # python环境
+    python_requires='>=3.6',  # python环境
     keywords=("ClickSQL", "Databases"),
     description="SQL programming",
     long_description=read_file('README.md'),
