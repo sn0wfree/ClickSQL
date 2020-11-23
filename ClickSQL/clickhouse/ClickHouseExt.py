@@ -46,6 +46,7 @@ class ClickHouseTableNodeExt(TableEngineCreator):
     def _get_sql(cls, db_table: str, cols: (tuple, None, list) = None,
                  order_by_cols: (list, tuple, None) = None,
                  data_filter: dict = {}, include_filter=True,
+                 limit: (None, int, str) = None,
                  **other_filters):
         """
 
@@ -74,7 +75,16 @@ class ClickHouseTableNodeExt(TableEngineCreator):
             order_by_clause = f" order by {','.join(order_by_cols)}"
         else:
             raise ValueError('order_by_cols get wrong length')
-        sql = f"select {','.join(cols)} from {db_table} where {' and '.join(sorted(set(['1'] + list(filter_yield))))} {order_by_clause}"
+        if limit is None:
+            limit_clause = ''
+        elif isinstance(limit, int):
+            limit_clause = f"limit {limit}"
+        elif isinstance(limit, str) and limit.strip(' ').lower().startswith('limit'):
+            limit_clause = limit
+        else:
+            raise ValueError(f'limit parameter got wrong type! only accept str,int or None, but got {type(limit)}')
+        where_clause = ' and '.join(sorted(set(['1'] + list(filter_yield))))
+        sql = f"select {','.join(cols)} from {db_table} where {where_clause} {order_by_clause} {limit_clause} "
         return sql
 
     def _execute(self, sql: str, **kwargs):

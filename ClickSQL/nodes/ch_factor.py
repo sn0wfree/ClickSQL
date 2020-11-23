@@ -169,7 +169,7 @@ class BaseSingleFactorBaseNode(object):
         else:
             raise ClickHouseTableNotExistsError(f'{self.db_table} is not exists!')
 
-    def fetch(self, pattern=r'[\s]+limit[\s]+[0-9]+$', **kwargs):
+    def fetch(self, num=1000, pattern=r'[\s]+limit[\s]+[0-9]+$', **kwargs):
         """
         fetch first 1000 line
         :return:
@@ -181,7 +181,7 @@ class BaseSingleFactorBaseNode(object):
             return self.operator(sql, **kwargs)
         else:
             try:
-                return self.operator(sql + ' limit 1000', **kwargs)
+                return self.operator(sql + f' limit {num}', **kwargs)
             except Exception as e:
                 return self.operator(sql, **kwargs)
 
@@ -487,15 +487,15 @@ class BaseSingleFactorTableNode(BaseSingleFactorNode, MergeSQLUtils):
 
 if __name__ == '__main__':
     v_st_dis_buy_info = BaseSingleFactorTableNode(
-        'clickhouse://default:Imsn0wfree@127.0.0.1:8123/sample.sample',
+        'clickhouse://default:Imsn0wfree@47.104.186.157:8123/raw.v_st_dis_buy_info',
         cols=['cust_no', 'product_id', 'money'],
         order_by_cols=['money asc'],
-        money='money >= 1000000'
+        money='money >= 1000000',limit = 'limit 10'
     )
 
     # factor >> 'test.test'
     # print(factor)
-    c = v_st_dis_buy_info['money'].head(10)
+    c = v_st_dis_buy_info.fetch(1000)
     print(c)
     # sql = v_st_dis_buy_info.merge('select cust_no, product_id, money as s from sample.sample where money >= 100000', using=['cust_no', 'product_id'])
     # print(sql)
