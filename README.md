@@ -126,11 +126,12 @@ sn0wfree
 4. able to execute insert query 
 5. no require clickhouse-client
 6. auto create table sql
+7. can execute explain query
 
 ## schedule
 
 2. create a pandas_liked executable function, which can compatible with pandas 
-3. can execute explain query
+3. alter function & drop function
 4. can execute user role query
 5. create analysis component
 6. auto report system

@@ -393,6 +393,17 @@ class BaseSingleFactorTableNode(BaseSingleFactorNode, MergeSQLUtils):
         self._execute = execute
         self._no_self_update = no_self_update
 
+    def explain(self, sql: str):
+        return self.operator(f'explain {sql}')
+
+    def drop_table(self, target: str):
+        if '.' not in target:
+            raise ValueError('drop table must tell correspond database')
+        self.operator(f'drop table if exists {target}')
+
+    def drop_db(self, target: str):
+        self.operator(f'drop database if exists {target}')
+
     def merge(self, seconds, using: (list, str, tuple), join_type='all full join',
               cols: (list, str, None) = None, ):
         if seconds.lower().startswith('select'):
