@@ -42,8 +42,7 @@ class ClickHouseTableNodeExt(TableEngineCreator):
             else:
                 raise ValueError('filter settings get wrong type! only accept string and tuple of string')
 
-    @classmethod
-    def _get_sql(cls, db_table: str, cols: (tuple, None, list) = None,
+    def _get_sql(self, db_table: str, cols: (tuple, None, list) = None,
                  order_by_cols: (list, tuple, None) = None,
                  data_filter: dict = {}, include_filter=True,
                  limit: (None, int, str) = None,
@@ -61,8 +60,14 @@ class ClickHouseTableNodeExt(TableEngineCreator):
             cols = ['*']
         elif len(cols) == 0:
             cols = ['*']
-        conditions = ChainMap(data_filter, *list(cls.__obtain_other_filter__(other_filters)))
-        filter_yield = cls.__extend_dict_value__(conditions)
+
+        if '*' in cols:
+            cols = list(cols)
+            # replace * into columns
+            cols.pop(index=cols.index('*'))
+            cols.extend(self.query(f"desc {db_table}")['name'].values.tolist())
+        conditions = ChainMap(data_filter, *list(self.__obtain_other_filter__(other_filters)))
+        filter_yield = self.__extend_dict_value__(conditions)
         if include_filter:
             cols = set(list(cols) + list(conditions.keys()))
         else:
