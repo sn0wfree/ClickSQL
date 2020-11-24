@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 # import matplotlib.pyplot as plt
 # import seaborn as sns
-import statsmodels.api as sm
+# import statsmodels.api as sm
 from scipy.stats import t
 
 from ClickSQL.utils import boost_up, cached_property
@@ -16,7 +16,7 @@ from ClickSQL.utils import boost_up, cached_property
 # sns.set_style('whitegrid')
 
 
-event_tuple = namedtuple('event', ('before_event_window', 'event_window', 'prefix_event', 'gap'))
+event_tuple = namedtuple('event', ('before_event_window', 'event_window', 'post_event_window', 'gap'))
 
 
 # fig = plt.figure()
@@ -48,10 +48,96 @@ event_tuple = namedtuple('event', ('before_event_window', 'event_window', 'prefi
 # return_df['RF'] = 0.0065
 # return_df['Mkt_RF'] = return_df['^GSPC'] - return_df['RF']
 
-class EventStudyUtils(object):
+class EventDataKeyError(KeyError): pass
+
+
+class DefaultModel(object):
+    @staticmethod
+    def check_type(name: str, data: object, data_type: object):
+        if isinstance(data, data_type):
+            pass
+        else:
+            raise TypeError(f"{name} got wrong type! only accept {data_type}")
+
     @classmethod
-    def cal_residual(cls, return_df: pd.DataFrame, event_dict: dict, date='Date', rf='RF',
-                     factors=['Mkt_RF'], formula="{stock} ~ 1 + {factors_str}",
+    def real_run(cls, *args, **kwargs) -> pd.Series:
+        estimation_df, event_df, stock = args
+        cls.check_type('estimation_df', estimation_df, pd.DataFrame)
+        cls.check_type('event_df', event_df, pd.DataFrame)
+        cls.check_type('stock', stock, str)
+        if 'formula' in kwargs.keys():
+            cls.check_type('formula', kwargs['formula'], str)
+        cls.check_type('factors', kwargs['factors'], list)
+        return cls.cal_ar(*args, **kwargs)
+
+    @staticmethod
+    def cal_ar():
+        raise ValueError('cal_ar have not been defined!')
+
+
+class EventStudyUtils(object):
+    @staticmethod
+    def split_event(return_df: pd.DataFrame, event_happen_day: str, stock, date='Date', factors=['Mkt_RF'],
+                    event_info: tuple = (250, 20, 10, 1), ):
+        variables = [date, stock] + factors
+        event_set = event_tuple(*event_info)
+        post_event_window = event_set.post_event_window
+        after_event_window = event_set.event_window - post_event_window
+        try:
+            data = return_df[variables]
+        except KeyError as e:
+            raise EventDataKeyError(e)
+        event_index_loc = int(data[data[date] == str(event_happen_day)].index.values)
+        estimation_df = data.loc[event_index_loc - (
+                event_set.before_event_window + event_set.post_event_window + event_set.gap): event_index_loc - (
+                event_set.post_event_window + event_set.gap), variables]
+        event_df = data.loc[event_index_loc - event_set.post_event_window: event_index_loc + after_event_window,
+                   variables].reset_index(drop=True)
+
+        event_df.index = event_df.index - event_set.post_event_window
+
+        return estimation_df, event_df
+
+    @classmethod
+    def cal_ar_single(cls, return_df: pd.DataFrame, event_happen_day: str, stock: str,
+                      date='Date', factors=['Mkt_RF'], event_info: tuple = (250, 20, 10, 1), ar_only=True,
+                      model=DefaultModel):
+        # event_set = event_tuple(*event_info)
+        #
+        # variables = [date, stock, rf] + factors
+        # data = return_df[variables]
+        # data[stock] = data.eval(f'{stock} - {rf}')
+        # after_event_window = event_set.event_window - event_set.post_event_window
+        #
+        # event_index = int(data[data[date] == str(event_happen_day)].index.values)
+        # estimation_df = data.loc[event_index - (
+        #         event_set.before_event_window + event_set.post_event_window + event_set.gap): event_index - (
+        #         event_set.post_event_window + event_set.gap), variables]
+
+        estimation_df, event_df = cls.split_event(return_df, event_happen_day, stock, date=date,
+                                                  event_info=event_info, factors=factors)
+
+        # expected returns for each firm in the estimation window
+        # event_df = data.loc[event_index - event_set.post_event_window: event_index + after_event_window,
+        #            variables].reset_index(drop=True)
+        if issubclass(model, DefaultModel):
+            ar_series = model.real_run(estimation_df, event_df, stock, factors=factors)
+        else:
+            raise TypeError(f'model got wrong definition: {model.__name__}! should be a DefaultModel-liked class')
+
+        # event_df[f'{stock}_er'] = np.dot(event_df[factors].values, beta_Mkt) + alpha
+        # event_df[f'{stock}_ar'] = event_df.eval(f'{stock} - {stock}_er')
+        # event_df.index = event_df.index - event_set.post_event_window
+        if ar_only:
+            # output_cols = [f'{stock}_ar']
+            return pd.DataFrame(ar_series)
+        else:
+            event_df[f'{stock}_ar'] = ar_series
+            return event_df
+
+    @classmethod
+    def cal_residual(cls, return_df: pd.DataFrame, event_dict: dict, date='Date',
+                     factors=['Mkt_RF'], model=DefaultModel,
                      event_info: tuple = (250, 20, 10, 1), ar_only=True, boost=True):
 
         """
@@ -64,15 +150,14 @@ class EventStudyUtils(object):
         :param return_df:
         :param event_dict:
         :param date:
-        :param rf:
         :param factors:
-        :param formula:
+        :param model:
         :param event_info:
         :param ar_only:
         :param boost:
         :return:
         """
-        func = partial(cls.cal_ar_single, date=date, rf=rf, factors=factors, formula=formula,
+        func = partial(cls.cal_ar_single, date=date, factors=factors, model=model,
                        event_info=event_info, ar_only=ar_only)
 
         tasks = ((return_df, event_happen_day, stock) for stock, event_happen_day in event_dict.items())
@@ -80,45 +165,8 @@ class EventStudyUtils(object):
         if boost:
             holder = boost_up(func, tasks, star=True)
         else:
-            holder = [func(return_df, event_happen_day, stock_return=stock) for _, event_happen_day, stock in tasks]
+            holder = [func(return_df, event_happen_day, stock=stock) for _, event_happen_day, stock in tasks]
         return pd.concat(holder, axis=1)
-
-    @staticmethod
-    def cal_ar_single(return_df: pd.DataFrame, event_happen_day: str, stock: str,
-                      date='Date', rf='RF', factors=['Mkt_RF'], formula="{stock} ~1 +  {factors_str}",
-                      event_info: tuple = (250, 20, 10, 1), ar_only=True):
-        event_set = event_tuple(*event_info)
-
-        variables = [date, stock, rf] + factors
-        data = return_df[variables]
-        data[stock] = data.eval(f'{stock} - {rf}')
-        suffix_event = event_set.event_window - event_set.prefix_event
-
-        event_index = int(data[data[date] == str(event_happen_day)].index.values)
-        estimation_df = data.loc[event_index - (
-                event_set.before_event_window + event_set.prefix_event + event_set.gap): event_index - (
-                event_set.prefix_event + event_set.gap), variables]
-
-        f1 = formula.format(stock=stock, rf=rf, factors_str='+'.join(factors))
-        print(f1)
-        models = sm.OLS.from_formula(f1, data=estimation_df).fit()
-        params = models.params
-        beta_Mkt = params[factors]
-        alpha = params["Intercept"]
-        bse = models.bse
-
-        # expected returns for each firm in the estimation window
-        event_df = data.loc[event_index - event_set.prefix_event: event_index + suffix_event,
-                   variables].reset_index(drop=True)
-
-        event_df[f'{stock}_er'] = np.dot(event_df[factors].values, beta_Mkt) + alpha
-        event_df[f'{stock}_ar'] = event_df.eval(f'{stock} - {stock}_er')
-        event_df.index = event_df.index - event_set.prefix_event
-        if ar_only:
-            output_cols = [f'{stock}_ar']
-            return event_df[output_cols]
-        else:
-            return event_df
 
     # @staticmethod
     # def cal_aar(ar_df: pd.DataFrame) -> pd.Series:
@@ -154,11 +202,17 @@ class EventStudyUtils(object):
 
 
 class EventStudy(EventStudyUtils):
-    def __init__(self, return_df: pd.DataFrame, event_dict: dict, date='Date', rf='RF',
-                 factors=['Mkt_RF'], formula="{stock} ~ {rf} + {factors_str}",
-                 event_info: tuple = (250, 20, 10, 1), ar_only=True, boost=True):
+    def __call__(self, return_df: pd.DataFrame, event_dict: dict, date='Date', factors=['Mkt_RF']):
+        self.data = return_df
+        self.event_dict = event_dict
+        self.cols = dict(date=date, factors=factors)
+        return self.result
+
+    def __init__(self, return_df: (None, pd.DataFrame) = None, event_dict: (dict, None) = None, date='Date',
+                 factors=['Mkt_RF'], model=DefaultModel, event_info: tuple = (250, 20, 10, 1), ar_only=True,
+                 boost=False):
         """
-        >>>  es = EventStudy(return_df,event_dict=event_dict,date='Date',rf='RF', factors=['Mkt_RF'],
+        >>>  es = EventStudy(return_df,event_dict=event_dict,date='Date', factors=['Mkt_RF'],
                              formula="{stock} ~ 1 + {factors_str}",event_info=(250, 10, 5, 1))
 
         >>> es.result
@@ -190,17 +244,26 @@ class EventStudy(EventStudyUtils):
         """
         self.data = return_df
         self.event_dict = event_dict
-        self.cols = dict(date=date, rf=rf, factors=factors)
-        self.formula = formula
+        self.cols = dict(date=date, factors=factors)
+        self.model = model
         self.event_info = event_info
         self.ar_only = ar_only
         self.boost = boost
-        self.aar = self.ar
 
-    @cached_property
+    @property
+    def arr(self):
+        return self.ar
+
+    @property
     def residual(self):
-        return self.cal_residual(self.data, self.event_dict, date=self.cols['date'], rf=self.cols['rf'],
-                                 factors=self.cols['factors'], formula=self.formula,
+        if self.data is None:
+            raise TypeError('return_df is not setup!')
+        if self.event_dict is None:
+            raise TypeError('event_dict is not setup!')
+        if self.event_dict is None:
+            raise TypeError('date and factors are not setup!')
+        return self.cal_residual(self.data, self.event_dict, date=self.cols['date'],
+                                 factors=self.cols['factors'], model=self.model,
                                  event_info=self.event_info, ar_only=self.ar_only, boost=self.boost)
 
     @cached_property
@@ -404,34 +467,14 @@ class EventStudy(EventStudyUtils):
 # # plt.plot(se * -1.96, color='red', linestyle='--')
 # # plt.ylabel("Cumulative Return")
 # # plt.title("Cumulative Average Abnormal Return")
+# aar_df = EventStudy.cal_aar(es.ar)
+# car_series = EventStudy.cal_car(es.ar)
 
+# mean_AAR = es.ar
+# var_AAR = es.var_residual
+# var_matrix = pd.DataFrame(var_AAR)
+# var_matrix = var_matrix.T
+# var_AAR2 = sum(var_matrix.iloc[0]) / 15 ** 2
+# Std_AAR = np.sqrt(var_AAR2)
 if __name__ == '__main__':
-    stock_list = ['AMZN', 'AAPL', 'TSLA', 'GE', 'GILD', 'BA', 'NFLX', 'MS',
-                  'LNVGY', 'BABA', 'LK', 'JOBS', 'CEO', 'TSM', 'JD', '^GSPC']
-    firm_list = stock_list[:-1]
-    date = ['2020-03-13', '2020-03-13', '2020-03-13', '2020-03-13', '2020-03-13', '2020-03-13', '2020-03-13',
-            '2020-03-13', '2020-01-23', '2020-01-23', '2020-01-23', '2020-01-23', '2020-01-23', '2020-01-23',
-            '2020-01-23']
-    date_df = pd.DataFrame(date, index=firm_list, columns=['Date'])
-    date_df.index.name = 'CompanyName'
-    #
-    return_df = pd.read_csv('data.csv')
-    event_dict = date_df.to_dict()['Date']
-    es = EventStudy(return_df, event_dict=event_dict, date='Date', rf='RF', factors=['Mkt_RF'],
-                    formula="{stock} ~ 1 + {factors_str}", event_info=(250, 10, 5, 1), ar_only=True, boost=True)
-    # aar_df = EventStudy.cal_aar(es.ar)
-    # car_series = EventStudy.cal_car(es.ar)
-
-    # mean_AAR = es.ar
-    # var_AAR = es.var_residual
-    # var_matrix = pd.DataFrame(var_AAR)
-    # var_matrix = var_matrix.T
-    # var_AAR2 = sum(var_matrix.iloc[0]) / 15 ** 2
-    # Std_AAR = np.sqrt(var_AAR2)
-
-    res = es.result
-    # np.sqrt(ar.iloc[:,9-1].std()**2/17)*1.96
-    # print(es.aar)
-
-    print(res)
     pass
