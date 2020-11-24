@@ -114,7 +114,7 @@ class BaseSingleFactorBaseNode(object):
 
     @property
     def __sql__(self):
-        return self.operator._get_sql(db_table=self.db_table, **self._kwargs)
+        return self.operator.get_sql(db_table=self.db_table, **self._kwargs)
 
     @property
     def __factor_id__(self):  # add iid function get factor table id
@@ -499,7 +499,7 @@ class BaseSingleFactorTableNode(BaseSingleFactorNode, MergeSQLUtils):
 if __name__ == '__main__':
     v_st_dis_buy_info = BaseSingleFactorTableNode(
         'clickhouse://default:Imsn0wfree@47.104.186.157:8123/raw.v_st_dis_buy_info',
-        cols=['cust_no', 'product_id', 'money'],
+        cols=None,
         order_by_cols=['money asc'],
         money='money >= 1000000', limit='limit 10'
     )

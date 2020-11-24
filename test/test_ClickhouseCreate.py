@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 from ClickSQL.clickhouse.ClickHouseCreate import TableEngineCreator, ClickHouseTableExistsError
 
-conn = 'clickhouse://default:Imsn0wfree@47.104.186.157:8123/test.test'
+from test import conn
 
 
 class MyTestCase(unittest.TestCase):
