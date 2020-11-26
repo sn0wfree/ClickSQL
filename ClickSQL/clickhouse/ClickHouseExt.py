@@ -49,6 +49,8 @@ class ClickHouseTableNodeExt(TableEngineCreator):
                 **other_filters):
         """
 
+        :param limit:
+        :param db_table:
         :param data_filter:
         :param cols:
         :param include_filter:

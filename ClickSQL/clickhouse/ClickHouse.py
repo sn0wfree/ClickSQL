@@ -3,7 +3,7 @@ import gzip
 import warnings
 from collections import namedtuple
 from urllib import parse
-
+import numpy as np
 import asyncio
 import json
 import nest_asyncio
@@ -51,6 +51,36 @@ def SmartBytes(result: bytes, status_code: int):
 
 # TODO change to queue mode change remove aiohttp depends
 class ClickHouseTools(object):
+    @staticmethod
+    def _check_df_and_dump(df, describe_table):
+        describe_table = describe_table[~describe_table['default_type'].isin(['MATERIALIZED', 'ALIAS'])]
+        non_nullable_columns = list(describe_table[~describe_table['type'].str.startswith('Nullable')]['name'])
+        integer_columns = list(describe_table[describe_table['type'].str.contains('Int', regex=False)]['name'])
+        missing_in_df = {i: np.where(df[i].isnull(), 1, 0).sum() for i in non_nullable_columns}
+
+        df_columns = list(df.columns)
+        each_row = df.to_dict(orient='records')
+        for i in missing_in_df:
+            if missing_in_df[i] > 0:
+                raise ValueError('"{0}" is not a nullable column, missing values are not allowed.'.format(i))
+
+        for row in each_row:
+            for col in df_columns:
+                if pd.isnull(row[col]):
+                    row[col] = None
+                else:
+                    if col in integer_columns:
+                        try:
+                            row[col] = int(row[col])
+                        except Exception as e:
+                            raise ValueError('Column "{0}" is {1}, while value "{2}"'.format(col,
+                                                                                             describe_table[
+                                                                                                 describe_table[
+                                                                                                     'name'] == col].iloc[
+                                                                                                 0]['type'], row[col]) + \
+                                             ' in the dataframe column cannot be converted to Integer.')
+            yield json.dumps(row, ensure_ascii=False)
+
     @staticmethod
     def _check_sql_type(sql: str):
         if sql.lower().startswith(available_queries_select):
@@ -289,6 +319,65 @@ class ClickHouseBaseNode(ClickHouseTools):
         else:
             raise ValueError(f'sql must be str or list or tuple,but get {type(sql)}')
         return result
+
+    def get_describe_table(self, db, table):
+        describe_sql = 'describe table {}.{}'.format(db, table)
+        describe_table = self.__execute__(describe_sql, convert_to='dataframe', transfer_sql_format=False,
+                                          loop=None, to_df=True, raise_error=True)
+        # non_nullable_columns = list(describe_table[~describe_table['type'].str.startswith('Nullable')]['name'])
+        # integer_columns = list(describe_table[describe_table['type'].str.contains('Int', regex=False)]['name'])
+        # missing_in_df = {i: np.where(df[i].isnull(), 1, 0).sum() for i in non_nullable_columns}
+        #
+        # df_columns = list(df.columns)
+        # each_row = df.to_dict(orient='records')
+        # del df
+        return describe_table  # , integer_columns, non_nullable_columns
+
+        # return df_columns, each_row
+
+    def insert_df(self, df: pd.DataFrame, db: str, table: str):
+
+        describe_table = self.get_describe_table(db, table)
+        # df_columns, each_row = self._check_df(df, describe_table)
+        query_with_format = 'insert into {0} format JSONEachRow \n{1}'.format('{}.{}'.format(db, table), '\n'.join(
+            [i for i in self._check_df_and_dump(df, describe_table)]))
+        # json_each_row = '\n'.join([json.dumps(i, ensure_ascii=False) for i in each_row])
+        # del each_row
+        #
+        # query_with_format = 'insert into {0} format JSONEachRow \n{1}'.format(db_table, json_each_row)
+        # del json_each_row
+        self.__execute__(query_with_format, convert_to='dataframe', transfer_sql_format=False,
+                         loop=None, to_df=False, raise_error=True)
+
+        # conn = self._create_conn()
+        # self._test_connection(conn)
+        # # self._check_sql_select_only(sql)
+        #
+        # updated_settings = self.settings
+        #
+        # # http_get_params = {'user': components.username, 'password': components.password}
+        # # http_get_params.update(updated_settings)
+        # # conn = http.client.HTTPConnection(components.hostname, port=components.port)
+        #
+        # conn = self._compression_switched_request(query_with_format, conn, updated_settings, self.http_get_params)
+        #
+        # # if updated_settings['enable_http_compression'] == 1:
+        # #     conn.request('POST', '/?' + urllib.parse.urlencode(http_get_params),
+        # #                  body=gzip.compress(query_with_format.encode()),
+        # #                  headers={'Content-Encoding': 'gzip', 'Accept-Encoding': 'gzip'})
+        # # else:
+        # #     conn.request('POST', '/?' + urllib.parse.urlencode(http_get_params), body=query_with_format.encode())
+        # resp = conn.getresponse()
+        #
+        # if resp.status != 200:
+        #     error_message = gzip.decompress(resp.read()).decode() if updated_settings['enable_http_compression'] == 1 \
+        #         else resp.read().decode()
+        #     conn.close()
+        #     raise NotImplementedError('Unknown Error: status: {0}, reason: {1}, message: {2}'.format(
+        #         resp.status, resp.reason, error_message))
+        #
+        # conn.close()
+        # print('Done.')
 
     def __execute__(self, sql: (str, list, tuple), convert_to: str = 'dataframe', transfer_sql_format: bool = True,
                     loop=None, to_df: bool = True, raise_error=True):

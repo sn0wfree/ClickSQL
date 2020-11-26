@@ -5,7 +5,7 @@ from collections import namedtuple
 
 from ClickSQL.clickhouse.ClickHouseExt import ClickHouseTableNodeExt
 from ClickSQL.errors import ClickHouseTableNotExistsError
-
+from functools import wraps
 complex_sql_select_count = 4
 factor_parameters = ('dt', 'code', 'value', 'fid')
 ft_node = namedtuple('factortable', factor_parameters)
