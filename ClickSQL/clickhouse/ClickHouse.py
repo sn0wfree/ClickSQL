@@ -6,7 +6,7 @@ from urllib import parse
 import numpy as np
 import asyncio
 import json
-import nest_asyncio
+import os
 import pandas as pd
 import requests
 from aiohttp import ClientSession
@@ -24,16 +24,20 @@ this scripts will use none of clickhouse client and only depend on requests to m
 clickhouse-server
 
 """
+try:
+    import nest_asyncio
 
-nest_asyncio.apply()  # allow run at jupyter and asyncio env
+    nest_asyncio.apply()  # allow run at jupyter and asyncio env
+except Exception as e:
+    warnings.warn('cannot run at jupyter or asyncio env')
 
 node_parameters = ('host', 'port', 'user', 'password', 'database')
 node = namedtuple('clickhouse', node_parameters)
 available_queries_select = ('select', 'show', 'desc')
 available_queries_insert = ('insert', 'optimize', 'create')
-PRINT_CHECK_RESULT = True
-GLOBAL_RAISE_ERROR = True
-SEMAPHORE = 10  # control async number for whole query list
+PRINT_CHECK_RESULT =  os.environ.get('PRINT_CHECK_RESULT', default=True)
+GLOBAL_RAISE_ERROR =  os.environ.get('GLOBAL_RAISE_ERROR', default=True)
+SEMAPHORE = os.environ.get('SEMAPHORE', default=10)  # control async number for whole query list
 
 
 # class SmartResult(object):
