@@ -10,6 +10,7 @@ import pandas as pd
 from scipy.stats import t
 
 from ClickSQL.utils import boost_up, cached_property
+import warnings
 
 # fig = plt.figure()
 # sns.set_palette("GnBu_d")
@@ -78,8 +79,16 @@ class DefaultModel(object):
 class EventStudyUtils(object):
     @staticmethod
     def split_event(return_df: pd.DataFrame, event_happen_day: str, stock, date='Date', factors=['Mkt_RF'],
-                    event_info: tuple = (250, 20, 10, 1), ):
+                    event_info: tuple = (250, 20, 10, 1), detect=True):
         variables = [date, stock] + factors
+        if detect:
+            if event_info[-2] < 0:
+                if event_info[-1] > abs(event_info[-2]) + 1:
+                    pass
+                else:
+                    warnings.warn('estimation period covered event date! will shift estimation period!')
+                    event_info = (event_info[0], event_info[1], event_info[2], abs(event_info[-2]) + 1)
+
         event_set = event_tuple(*event_info)
         post_event_window = event_set.post_event_window
         after_event_window = event_set.event_window - post_event_window
