@@ -202,9 +202,12 @@ class EventStudyUtils(object):
 
 
 class EventStudy(EventStudyUtils):
-    def __call__(self, return_df: pd.DataFrame, event_dict: dict, date='Date', factors=['Mkt_RF']):
-        self.data = return_df
-        self.event_dict = event_dict
+    def __call__(self, return_df: pd.DataFrame, event_dict: dict, date='Date', factors=['Mkt_RF'],
+                 event_info: tuple = (250, 20, 10, 1), ):
+        data, new_event_dict = self.detect_multi_event_point(return_df, event_dict)
+        self.data = data
+        self.event_dict = new_event_dict
+        self.event_info = event_info
         self.cols = dict(date=date, factors=factors)
         return self.result
 
@@ -235,20 +238,53 @@ class EventStudy(EventStudyUtils):
         :param return_df:
         :param event_dict:
         :param date:
-        :param rf:
+
         :param factors:
-        :param formula:
+
         :param event_info:
         :param ar_only:
         :param boost:
         """
-        self.data = return_df
-        self.event_dict = event_dict
+
+        data, new_event_dict = self.detect_multi_event_point(return_df, event_dict)
+        self.data = data
+        self.event_dict = new_event_dict
         self.cols = dict(date=date, factors=factors)
         self.model = model
         self.event_info = event_info
         self.ar_only = ar_only
         self.boost = boost
+
+    @staticmethod
+    def detect_multi_event_point(return_df, event_dict: dict):
+        if return_df is None:
+            return None, None
+        cols = return_df.columns.tolist()
+        new_event_dict = {}
+        for k, v in event_dict.items():
+
+            if isinstance(v, str):
+
+                new_k = k + f"_{pd.to_datetime(v).strftime('%Y%m%d')}"
+                new_event_dict[new_k] = v
+                return_df[new_k] = return_df[k]
+            elif isinstance(v, (list, tuple)):
+                v = list(set(v))
+
+                if len(v) >= 1:
+                    # new_event_dict[k] = v
+                    for dt in v:
+                        new_k = k + f"_{pd.to_datetime(dt).strftime('%Y%m%d')}"
+                        if k in cols:
+                            return_df[new_k] = return_df[k]
+                        else:
+                            raise ValueError(f'{k} not found')
+                        new_event_dict[new_k] = dt
+                else:
+                    raise ValueError(f'event list is empty for {k}')
+            else:
+                raise ValueError('got wrong event list type')
+        return return_df, new_event_dict
 
     @property
     def arr(self):
