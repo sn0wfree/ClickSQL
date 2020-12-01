@@ -8,7 +8,7 @@ import pandas as pd
 
 class MarketModel(DefaultModel):
     @staticmethod
-    def cal_ar(estimation_df, event_df, stock: str, formula: str = "{stock} ~ 1 + Mkt_RF", factors=['Mkt_RF']):
+    def cal_ar(estimation_df, event_df, stock: str, formula: str = "{stock} ~ 1 + {factors}", factors=['Mkt_RF']):
         """
 
         :param estimation_df:  pd.DataFrame
@@ -18,7 +18,7 @@ class MarketModel(DefaultModel):
         :param factors:
         :return:
         """
-        f1 = formula.format(stock=stock, )
+        f1 = formula.format(stock=stock, factors="+".join(factors))
         # print(f1)
         models = sm.OLS.from_formula(f1, data=estimation_df).fit()
         params = models.params

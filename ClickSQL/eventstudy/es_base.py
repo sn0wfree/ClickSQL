@@ -71,7 +71,7 @@ class DefaultModel(object):
         return cls.cal_ar(*args, **kwargs)
 
     @staticmethod
-    def cal_ar():
+    def cal_ar(*args, **kwargs):
         raise ValueError('cal_ar have not been defined!')
 
 
