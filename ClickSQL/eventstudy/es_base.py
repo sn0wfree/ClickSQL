@@ -96,7 +96,7 @@ class EventStudyUtils(object):
             data = return_df[variables]
         except KeyError as e:
             raise EventDataKeyError(e)
-        event_index_loc = int(data[data[date] == str(event_happen_day)].index.values)
+        event_index_loc = int((pd.to_datetime(data[date]) - pd.to_datetime(event_happen_day)).abs().sort_values().index[0])
         estimation_df = data.loc[event_index_loc - (
                 event_set.before_event_window + event_set.post_event_window + event_set.gap): event_index_loc - (
                 event_set.post_event_window + event_set.gap), variables]
