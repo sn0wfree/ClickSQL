@@ -393,9 +393,9 @@ class CreateTableFromSQLUtils(object):
         if extra_format_dict is None:
             pass
         else:
-            dtypes_dict.update(extra_format_dict)
-        dtypes_str = {k: v for k, v in dtypes_dict.items() if k in cols}
-        base = cls._create_table_sql(db, table, dtypes_str, key_cols,
+            dtypes_dict._update(extra_format_dict)
+        dtypes_str_dict = {k: v for k, v in dtypes_dict.items() if k in cols}
+        base = cls._create_table_sql(db, table, dtypes_str_dict, key_cols,
                                      primary_key_cols=primary_key_cols,
                                      sample_by_cols=sample_by_cols,
                                      engine_type=engine_type,

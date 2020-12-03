@@ -1,6 +1,6 @@
-pandas>=1.0.5
+pandas
 numpy
 requests>=2.20.0
 aiohttp>=3.6.2
-nest_asyncio>=1.4.1
+nest_asyncio
 responder

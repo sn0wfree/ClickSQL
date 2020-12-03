@@ -6,6 +6,10 @@ from collections import namedtuple
 from ClickSQL.clickhouse.ClickHouseExt import ClickHouseTableNodeExt
 from ClickSQL.errors import ClickHouseTableNotExistsError
 from functools import wraps
+
+from ClickSQL.nodes.groupby import GroupSQLUtils
+from ClickSQL.nodes.merge import MergeSQLUtils
+
 complex_sql_select_count = 4
 factor_parameters = ('dt', 'code', 'value', 'fid')
 ft_node = namedtuple('factortable', factor_parameters)
@@ -82,6 +86,9 @@ class BaseSingleFactorBaseNode(object):
         self.status = 'SQL'
         self._INFO = info
 
+    def insert_df(self, *args, **kwargs):
+        self.operator.insert_df(*args, **kwargs)
+
     # create table
     def create(self, *args, **kwargs):
         """
@@ -92,7 +99,7 @@ class BaseSingleFactorBaseNode(object):
         """
         return self.operator.create(*args, **kwargs)
 
-    def update(self, **kwargs):
+    def _update(self, **kwargs):
         """
         update kwargs settings
         :param kwargs:
@@ -101,7 +108,7 @@ class BaseSingleFactorBaseNode(object):
 
         self._kwargs.update(kwargs)
 
-    def __str__(self):
+    def __str__(self, *args, **kwargs):
         return self.__sql__
 
     def __len__(self) -> int:
@@ -115,6 +122,9 @@ class BaseSingleFactorBaseNode(object):
     @property
     def __sql__(self):
         return self.operator.get_sql(db_table=self.db_table, **self._kwargs)
+
+    def __call__(self, sql, **kwargs):
+        return self.operator(sql, **kwargs)
 
     @property
     def __factor_id__(self):  # add iid function get factor table id
@@ -193,31 +203,9 @@ class BaseSingleFactorBaseNode(object):
         self._detect_complex_sql()
         return self.operator(self.__sql__, **kwargs)
 
-    # def __call__(self, **kwargs):
-    #     """
-    #
-    #     :param kwargs:
-    #     :return:
-    #     """
-    #     self.update(**kwargs)
-    #     if self.status == 'SQL':
-    #         return self.__sql__
-    #     elif self.status == 'SQL:fetch':
-    #         return self.fetch()
-    #     elif self.status == 'SQL:fetch_all':
-    #         return self.fetch_all()
-    #     else:
-    #         raise ValueError('status code is not supported!')
-
-
-class BaseSingleFactorNode(BaseSingleFactorBaseNode):
-    __slots__ = (
-        'operator', 'db', 'table', 'db_table', '_kwargs', '_raw_kwargs', 'status', '_INFO', 'depend_tables',
-        '_fid_ck', '_dt_max_1st', '_execute', '_no_self_update'
-    )
-
-    def __init__(self, *args, **kwargs):
-        super(BaseSingleFactorNode, self).__init__(*args, **kwargs)
+    @property
+    def row_count(self):
+        return self.__len__()
 
     @property
     def shape(self):
@@ -244,10 +232,6 @@ class BaseSingleFactorNode(BaseSingleFactorBaseNode):
         return self.dtypes.shape[0]
 
     @property
-    def row_count(self):
-        return self.__len__()
-
-    @property
     def empty(self):
         return self.total_rows == 0
 
@@ -266,10 +250,20 @@ class BaseSingleFactorNode(BaseSingleFactorBaseNode):
             raise ClickHouseTableNotExistsError(f'{self.db_table} is not exists!')
 
 
+# class BaseSingleFactorNode(BaseSingleFactorBaseNode):
+#     __slots__ = (
+#         'operator', 'db', 'table', 'db_table', '_kwargs', '_raw_kwargs', 'status', '_INFO', 'depend_tables',
+#         '_fid_ck', '_dt_max_1st', '_execute', '_no_self_update'
+#     )
+#
+#     def __init__(self, *args, **kwargs):
+#         super(BaseSingleFactorNode, self).__init__(*args, **kwargs)
+
+
 class UpdateSQLUtils(object):
 
     @staticmethod
-    def full_update(src_db_table: BaseSingleFactorNode, dst_db_table: BaseSingleFactorNode, **kwargs):
+    def full_update(src_db_table: BaseSingleFactorBaseNode, dst_db_table: BaseSingleFactorBaseNode, **kwargs):
         # dst_db_table = dst_db_table.db_table
         # dst_db, dst_table = dst_db_table.db, dst_db_table.table
         dst_table_type = dst_db_table.table_engine
@@ -280,7 +274,7 @@ class UpdateSQLUtils(object):
         return insert_sql
 
     @staticmethod
-    def incremental_update(src_db_table: BaseSingleFactorNode, dst_db_table: BaseSingleFactorNode,
+    def incremental_update(src_db_table: BaseSingleFactorBaseNode, dst_db_table: BaseSingleFactorBaseNode,
                            fid_ck: str, dt_max_1st=True, inplace=False, **kwargs):
         # src_db_table = src_table.db_table
         # src_table_type = src_db_table.table_engine
@@ -295,87 +289,17 @@ class UpdateSQLUtils(object):
         sql = f" select distinct {fid_ck} from {dst} order by {fid_ck} {order_asc} limit 1 "
         fid_ck_values = src_db_table.operator(sql).values.ravel().tolist()[0]
         if inplace:
-            src_db_table.update(**{f'{fid_ck} as src_{fid_ck}': f' {fid_ck} > {fid_ck_values}'})
+            src_db_table._update(**{f'{fid_ck} as src_{fid_ck}': f' {fid_ck} > {fid_ck_values}'})
             insert_sql = f"insert into {dst} {src_db_table}"
         else:
             src_db_table_copy = copy.deepcopy(src_db_table)
-            src_db_table_copy.update(**{f'{fid_ck} as src_{fid_ck}': f' {fid_ck} > {fid_ck_values}'})
+            src_db_table_copy._update(**{f'{fid_ck} as src_{fid_ck}': f' {fid_ck} > {fid_ck_values}'})
             insert_sql = f"insert into {dst} {src_db_table_copy}"
 
         return insert_sql
 
 
-class GroupSQLUtils(object):
-    @staticmethod
-    def group_top(sql: str, by: (str, list, tuple), top=5, cols: (str, None) = None):
-        if isinstance(by, str):
-            by = [by]
-        if cols is None:
-            cols = '*'
-        gt_sql = f"select {cols} from ({sql})  limit {top} by {','.join(by)} "
-        return gt_sql
-
-    # group table
-    @staticmethod
-    def group_by(db_table_or_sql: str,
-                 by: (str, list, tuple),
-                 apply_func: (list,),
-                 having: (list, tuple, None) = None):
-        if isinstance(by, str):
-            by = [by]
-            group_by_clause = f"group by {by}"
-        elif isinstance(by, (list, tuple)):
-            group_by_clause = f"group by ({','.join(by)})"
-        else:
-            raise ValueError(f'by only accept str list tuple! but get {type(by)}')
-        # db_table_or_sql = sql
-        if having is None:
-            having_clause = ''
-        elif isinstance(having, (list, tuple)):
-            having_clause = 'having ' + " and ".join(having)
-        else:
-            raise ValueError(f'having only accept list,tuple,None! but get {type(having)}')
-        sql = f"select  {','.join(by + apply_func)}  from ({db_table_or_sql}) {group_by_clause} {having_clause} "
-        # if execute:
-        #     self.operator(sql)
-        # else:
-        return sql
-
-
-class MergeSQLUtils(object):
-    # merge table
-    @staticmethod
-    def _merge(first: BaseSingleFactorNode,
-               seconds: (str, BaseSingleFactorNode),
-               using: (list, str, tuple),
-               cols: (list, str, None) = None,
-               join_type='all full join',
-
-               # cols: list,
-               #  sample: (int, float, None) = None,
-               #  array_join: (list, None) = None,
-               #  join: (dict, None) = None,
-               #  prewhere: (list, None) = None,
-               #  where: (list, None) = None,
-               #  having: (list, None) = None,
-               #  group_by: (list, None) = None,
-               #  order_by: (list, None) = None,
-               #  limit_by: (dict, None) = None,
-               #  limit: (int, None) = None
-               ) -> str:
-        # self._complex = True
-        if isinstance(using, (list, tuple)):
-            using = ','.join(using)
-
-        join = {'type': join_type, 'USING': using, 'sql': str(seconds)}
-        sql = ClickHouseTableNodeExt.select(str(first), cols, join=join, limit=None)
-        # if execute:
-        #     return self.operator(sql)
-        # else:
-        return sql
-
-
-class BaseSingleFactorTableNode(BaseSingleFactorNode, MergeSQLUtils):
+class BaseSingleFactorTableNode(BaseSingleFactorBaseNode):
     __slots__ = (
         'operator', 'db', 'table', 'db_table', '_kwargs', '_raw_kwargs', 'status', '_INFO', 'depend_tables',
         '_fid_ck', '_dt_max_1st', '_execute', '_no_self_update', '_complex'
@@ -393,9 +317,6 @@ class BaseSingleFactorTableNode(BaseSingleFactorNode, MergeSQLUtils):
         self._execute = execute
         self._no_self_update = no_self_update
 
-    def explain(self, sql: str):
-        return self.operator(f'explain {sql}')
-
     def drop_table(self, target: str):
         if '.' not in target:
             raise ValueError('drop table must tell correspond database')
@@ -404,20 +325,70 @@ class BaseSingleFactorTableNode(BaseSingleFactorNode, MergeSQLUtils):
     def drop_db(self, target: str):
         self.operator(f'drop database if exists {target}')
 
+    def nlargest(self, top, columns, execute=False, extra_cols=None):
+        """
+        return largest n by columns
+        :param extra_cols:
+        :param top:
+        :param columns:
+        :param execute:
+        :return:
+        """
+        by = [f'{c} desc' for c in columns]
+        sql = GroupSQLUtils.group_top(self.__sql__, by=by, top=top, cols=extra_cols)
+        if execute:
+            return self.operator(sql)
+        else:
+            return sql
+
+    def nsmallest(self, top, columns, execute=False, extra_cols=None):
+        """
+        return largest n by columns
+        :param extra_cols:
+        :param top:
+        :param columns:
+        :param execute:
+        :return:
+        """
+        by = [f'{c} asc' for c in columns]
+        sql = GroupSQLUtils.group_top(self.__sql__, by=by, top=top, cols=extra_cols)
+        if execute:
+            return self.operator(sql)
+        else:
+            return sql
+
+    def groupby(self,
+                by: (str, list, tuple),
+                apply_func: (list,),
+                having: (list, tuple, None) = None, execute=True):
+        """
+
+        :param execute:
+        :param by:
+        :param apply_func:
+        :param having:
+        :return:
+        """
+        sql = GroupSQLUtils.group_by(self.__sql__, by=by, apply_func=apply_func, having=having)
+        if execute:
+            return self.operator(sql)
+        else:
+            return sql
+
     def merge(self, seconds, using: (list, str, tuple), join_type='all full join',
-              cols: (list, str, None) = None, ):
+              cols: (list, str, None) = None, execute=True):
         if seconds.lower().startswith('select'):
             pass
         else:
             seconds = f" select * from {seconds}"
-        sql = self._merge(self, seconds, using=using, join_type=join_type, cols=cols)
-        return sql
-
-    def __call__(self, sql, **kwargs):
-        return self.operator(sql, **kwargs)
+        sql = MergeSQLUtils._merge(self, seconds, using=using, join_type=join_type, cols=cols)
+        if execute:
+            return self.operator(sql)
+        else:
+            return sql
 
     # update table
-    def __lshift__(self, src_db_table: BaseSingleFactorNode):
+    def __lshift__(self, src_db_table: BaseSingleFactorBaseNode):
         print('lshift')
         fid_ck = self._fid_ck
         dt_max_1st = self._dt_max_1st
@@ -426,8 +397,8 @@ class BaseSingleFactorTableNode(BaseSingleFactorNode, MergeSQLUtils):
 
         if isinstance(src_db_table, str):
             src_conn = copy.deepcopy(self.operator._src).replace(self.db_table, src_db_table)
-            src_db_table = BaseSingleFactorNode(src_conn, cols=['*'])
-        elif isinstance(src_db_table, BaseSingleFactorNode):
+            src_db_table = BaseSingleFactorBaseNode(src_conn, cols=['*'])
+        elif isinstance(src_db_table, BaseSingleFactorBaseNode):
             pass
         else:
             raise ValueError('src_db_table is not valid! please check!')
@@ -468,11 +439,11 @@ class BaseSingleFactorTableNode(BaseSingleFactorNode, MergeSQLUtils):
 
         if isinstance(dst_db_table, str):
             dst_conn = copy.deepcopy(self.operator._src)
-            dst_db_table = BaseSingleFactorNode(
+            dst_db_table = BaseSingleFactorBaseNode(
                 dst_conn.replace(self.db_table, dst_db_table),
                 cols=['*']
             )
-        elif isinstance(dst_db_table, BaseSingleFactorNode):
+        elif isinstance(dst_db_table, BaseSingleFactorBaseNode):
             pass
         else:
             raise ValueError('dst_db_table is not valid! please check!')
@@ -497,18 +468,18 @@ class BaseSingleFactorTableNode(BaseSingleFactorNode, MergeSQLUtils):
 
 
 if __name__ == '__main__':
-    v_st_dis_buy_info = BaseSingleFactorTableNode(
-        'clickhouse://default:Imsn0wfree@47.104.186.157:8123/raw.v_st_dis_buy_info',
-        cols=None,
-        order_by_cols=['money asc'],
-        money='money >= 1000000', limit='limit 10'
-    )
-    print(v_st_dis_buy_info)
-
-    # factor >> 'test.test'
-    # print(factor)
-    c = v_st_dis_buy_info.fetch(1000)
-    print(c)
+    # v_st_dis_buy_info = BaseSingleFactorTableNode(
+    #     'clickhouse://default:Imsn0wfree@47.104.186.157:8123/raw.v_st_dis_buy_info',
+    #     cols=None,
+    #     order_by_cols=['money asc'],
+    #     money='money >= 1000000', limit='limit 10'
+    # )
+    # print(v_st_dis_buy_info)
+    #
+    # # factor >> 'test.test'
+    # # print(factor)
+    # c = v_st_dis_buy_info.fetch(1000)
+    # print(c)
     # sql = v_st_dis_buy_info.merge('select cust_no, product_id, money as s from sample.sample where money >= 100000', using=['cust_no', 'product_id'])
     # print(sql)
     # c = factor('show tables from raw')
@@ -516,5 +487,11 @@ if __name__ == '__main__':
     # print(c2)
 
     # print(1 >> 2)
+    import numpy as np
+    import pandas as pd
+
+    data = np.random.random(size=(100, 2))
+    res = pd.DataFrame(data, columns=['test1', 'test2'])
+    res.groupby('test1')
 
     pass

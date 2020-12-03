@@ -2,7 +2,7 @@
 # coding=utf8
 import responder
 
-from ClickSQL.nodes.factor_node import BaseSingleFactorBaseNode
+from ClickSQL.nodes.base import BaseSingleFactorBaseNode
 
 conn_settings = 'clickhouse://default:Imsn0wfree@47.104.186.157:8123/system.columns'
 # Tables =

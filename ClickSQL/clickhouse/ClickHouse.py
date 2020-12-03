@@ -12,11 +12,10 @@ import requests
 from aiohttp import ClientSession
 from functools import partial, partialmethod
 
-from ClickSQL.conf.parse_rfc_1738_args import parse_rfc1738_args
 from ClickSQL.errors import ParameterKeyError, ParameterTypeError, DatabaseTypeError, DatabaseError, \
     HeartbeatCheckFailure, ClickHouseTableNotExistsError
 # from ClickSQL.utils.file_cache import file_cache
-from ClickSQL.utils import cached_property, file_cache
+from ClickSQL.utils import cached_property, file_cache, parse_rfc1738_args
 
 """
 this will hold base function of clickhouse and it will apply a path of access clickhouse through clickhouse api service
@@ -35,8 +34,8 @@ node_parameters = ('host', 'port', 'user', 'password', 'database')
 node = namedtuple('clickhouse', node_parameters)
 available_queries_select = ('select', 'show', 'desc')
 available_queries_insert = ('insert', 'optimize', 'create')
-PRINT_CHECK_RESULT =  os.environ.get('PRINT_CHECK_RESULT', default=True)
-GLOBAL_RAISE_ERROR =  os.environ.get('GLOBAL_RAISE_ERROR', default=True)
+PRINT_CHECK_RESULT = os.environ.get('PRINT_CHECK_RESULT', default=True)
+GLOBAL_RAISE_ERROR = os.environ.get('GLOBAL_RAISE_ERROR', default=True)
 SEMAPHORE = os.environ.get('SEMAPHORE', default=10)  # control async number for whole query list
 
 
@@ -339,19 +338,34 @@ class ClickHouseBaseNode(ClickHouseTools):
 
         # return df_columns, each_row
 
-    def insert_df(self, df: pd.DataFrame, db: str, table: str):
-
+    def insert_df(self, df: pd.DataFrame, db: str, table: str, chunksize=100000):
+        """
+        ## TODO need to test
+        :param df:  data for inserted
+        :param db: target database
+        :param table:  target table
+        :return:
+        """
         describe_table = self.get_describe_table(db, table)
-        # df_columns, each_row = self._check_df(df, describe_table)
-        query_with_format = 'insert into {0} format JSONEachRow \n{1}'.format('{}.{}'.format(db, table), '\n'.join(
-            [i for i in self._check_df_and_dump(df, describe_table)]))
+        row_count = df.shape[0]
+        rows_data = (i for i in self._check_df_and_dump(df, describe_table))
+        if row_count <= chunksize:
+
+            # df_columns, each_row = self._check_df(df, describe_table)
+
+            query_with_format = ['insert into {0} format JSONEachRow \n{1}'.format('{}.{}'.format(db, table), '\n'.join(
+                list(rows_data)))]
+        else:
+            from ClickSQL.utils.chunk import chunk
+            query_with_format = ['insert into {0} format JSONEachRow \n{1}'.format('{}.{}'.format(db, table), '\n'.join(
+                data)) for data in chunk(list(rows_data), chunksize)]
+
         # json_each_row = '\n'.join([json.dumps(i, ensure_ascii=False) for i in each_row])
         # del each_row
         #
         # query_with_format = 'insert into {0} format JSONEachRow \n{1}'.format(db_table, json_each_row)
         # del json_each_row
-        self.__execute__(query_with_format, convert_to='dataframe', transfer_sql_format=False,
-                         loop=None, to_df=False, raise_error=True)
+        self.__execute__(*query_with_format, transfer_sql_format=False, loop=None, to_df=False, raise_error=True)
 
         # conn = self._create_conn()
         # self._test_connection(conn)

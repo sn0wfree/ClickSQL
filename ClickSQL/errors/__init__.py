@@ -30,3 +30,12 @@ class ClickHouseTableExistsError(Exception):
 
 class ClickHouseTableNotExistsError(Exception):
     pass
+
+
+class ArgumentError(Exception):
+    """Raised when an invalid or conflicting function argument is supplied.
+
+    This error generally corresponds to construction time state errors.
+
+    """
+    pass

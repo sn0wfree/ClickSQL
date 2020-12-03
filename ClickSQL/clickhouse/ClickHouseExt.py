@@ -28,6 +28,9 @@ class ClickHouseTableNodeExt(TableEngineCreator):
             else:
                 raise ValueError('filter settings get wrong type! only accept string and tuple of string')
 
+    def explain(self, sql: str):
+        return self.query(f'explain {sql}')
+
     @staticmethod
     def __obtain_other_filter__(other_filters):
         exits_keys = []

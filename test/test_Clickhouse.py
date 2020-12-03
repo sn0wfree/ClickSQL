@@ -3,7 +3,7 @@ import unittest
 
 from ClickSQL.clickhouse.ClickHouse import ClickHouseTableNode
 from ClickSQL.clickhouse.ClickHouse import DatabaseTypeError
-from ClickSQL.conf.parse_rfc_1738_args import ArgumentError
+from ClickSQL.utils.parse_rfc_1738_args import ArgumentError
 
 
 class MyTestConnectionCase(unittest.TestCase):

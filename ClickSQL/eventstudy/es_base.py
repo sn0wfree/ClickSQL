@@ -96,7 +96,8 @@ class EventStudyUtils(object):
             data = return_df[variables]
         except KeyError as e:
             raise EventDataKeyError(e)
-        event_index_loc = int((pd.to_datetime(data[date]) - pd.to_datetime(event_happen_day)).abs().sort_values().index[0])
+        event_index_loc = int(
+            (pd.to_datetime(data[date]) - pd.to_datetime(event_happen_day)).abs().sort_values().index[0])
         estimation_df = data.loc[event_index_loc - (
                 event_set.before_event_window + event_set.post_event_window + event_set.gap): event_index_loc - (
                 event_set.post_event_window + event_set.gap), variables]
@@ -320,7 +321,7 @@ class EventStudy(EventStudyUtils):
 
         :return:
         """
-        return self.residual.mean(axis=1)
+        return self.residual.mean(axis=1, skipna=True)
 
     @cached_property
     def std_ar(self):
