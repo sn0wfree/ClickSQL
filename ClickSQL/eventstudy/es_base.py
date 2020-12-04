@@ -108,6 +108,20 @@ class EventStudyUtils(object):
 
         return estimation_df, event_df
 
+    @staticmethod
+    def cal_ar_single_no_split_event(estimation_df, event_df, stock: str, factors=['Mkt_RF'],
+                                     ar_only=True, model=DefaultModel):
+        if issubclass(model, DefaultModel):
+            ar_series = model.real_run(estimation_df, event_df, stock, factors=factors)
+        else:
+            raise TypeError(f'model got wrong definition: {model.__name__}! should be a DefaultModel-liked class')
+        if ar_only:
+            # output_cols = [f'{stock}_ar']
+            return pd.DataFrame(ar_series)
+        else:
+            event_df[f'{stock}_ar'] = ar_series
+            return event_df
+
     @classmethod
     def cal_ar_single(cls, return_df: pd.DataFrame, event_happen_day: str, stock: str,
                       date='Date', factors=['Mkt_RF'], event_info: tuple = (250, 20, 10, 1), ar_only=True,
@@ -130,20 +144,41 @@ class EventStudyUtils(object):
         # expected returns for each firm in the estimation window
         # event_df = data.loc[event_index - event_set.post_event_window: event_index + after_event_window,
         #            variables].reset_index(drop=True)
-        if issubclass(model, DefaultModel):
-            ar_series = model.real_run(estimation_df, event_df, stock, factors=factors)
-        else:
-            raise TypeError(f'model got wrong definition: {model.__name__}! should be a DefaultModel-liked class')
+        # if issubclass(model, DefaultModel):
+        #     ar_series = model.real_run(estimation_df, event_df, stock, factors=factors)
+        # else:
+        #     raise TypeError(f'model got wrong definition: {model.__name__}! should be a DefaultModel-liked class')
+        #
+        # # event_df[f'{stock}_er'] = np.dot(event_df[factors].values, beta_Mkt) + alpha
+        # # event_df[f'{stock}_ar'] = event_df.eval(f'{stock} - {stock}_er')
+        # # event_df.index = event_df.index - event_set.post_event_window
+        # if ar_only:
+        #     # output_cols = [f'{stock}_ar']
+        #     return pd.DataFrame(ar_series)
+        # else:
+        #     event_df[f'{stock}_ar'] = ar_series
+        #     return event_df
+        return cls.cal_ar_single_no_split_event(estimation_df, event_df, model, stock, factors=factors,
+                                                ar_only=ar_only, )
 
-        # event_df[f'{stock}_er'] = np.dot(event_df[factors].values, beta_Mkt) + alpha
-        # event_df[f'{stock}_ar'] = event_df.eval(f'{stock} - {stock}_er')
-        # event_df.index = event_df.index - event_set.post_event_window
-        if ar_only:
-            # output_cols = [f'{stock}_ar']
-            return pd.DataFrame(ar_series)
-        else:
-            event_df[f'{stock}_ar'] = ar_series
-            return event_df
+    @classmethod
+    def split_event2(cls, return_df: pd.DataFrame, event_dict: dict, date='Date',
+                     factors=['Mkt_RF'],
+                     event_info: tuple = (250, 20, 10, 1)):
+        # tasks_pre = ((stock, event_happen_day) for stock, event_happen_day in event_dict.items())
+        sub_tasks = {}
+        for stock, event_happen_day in event_dict.items():
+            if event_happen_day in sub_tasks.keys():
+                sub_tasks[event_happen_day].append(stock)
+            else:
+                sub_tasks[event_happen_day] = [stock]
+        for event_happen_day, stock_list in sub_tasks.items():
+            group_estimation_df, group_event_df = cls.split_event(return_df, event_happen_day, stock_list, date=date,
+                                                                  event_info=event_info, factors=factors)
+            for stock in stock_list:
+                yield group_estimation_df, group_event_df, stock
+
+        # tasks = ((return_df, event_happen_day, stock) for stock, event_happen_day in tasks_pre)
 
     @classmethod
     def cal_residual(cls, return_df: pd.DataFrame, event_dict: dict, date='Date',
@@ -167,15 +202,17 @@ class EventStudyUtils(object):
         :param boost:
         :return:
         """
-        func = partial(cls.cal_ar_single, date=date, factors=factors, model=model,
-                       event_info=event_info, ar_only=ar_only)
+        # func = partial(cls.cal_ar_single, date=date, factors=factors, model=model,
+        #                event_info=event_info, ar_only=ar_only)
+        func = partial(cls.cal_ar_single_no_split_event, factors=factors, model=model, ar_only=ar_only)
 
-        tasks = ((return_df, event_happen_day, stock) for stock, event_happen_day in event_dict.items())
+        # tasks = ((return_df, event_happen_day, stock) for stock, event_happen_day in event_dict.items())
+        tasks = cls.split_event2(return_df, event_dict, date=date, factors=factors, event_info=event_info)
 
         if boost:
             holder = boost_up(func, tasks, star=True)
         else:
-            holder = [func(return_df, event_happen_day, stock=stock) for _, event_happen_day, stock in tasks]
+            holder = [func(group_estimation_df, group_event_df, stock) for group_estimation_df, group_event_df, stock in tasks]
         return pd.concat(holder, axis=1)
 
     # @staticmethod
