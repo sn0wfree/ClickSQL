@@ -80,7 +80,12 @@ class EventStudyUtils(object):
     @staticmethod
     def split_event(return_df: pd.DataFrame, event_happen_day: str, stock, date='Date', factors=['Mkt_RF'],
                     event_info: tuple = (250, 20, 10, 1), detect=True):
-        variables = [date, stock] + factors
+        if isinstance(stock, str):
+            variables = [date, stock] + factors
+        elif isinstance(stock, list):
+            variables = [date] + stock + factors
+        else:
+            raise TypeError('stock got wrong type! only accept str or list')
         if detect:
             if event_info[-2] < 0:
                 if event_info[-1] > abs(event_info[-2]) + 1:
@@ -212,7 +217,8 @@ class EventStudyUtils(object):
         if boost:
             holder = boost_up(func, tasks, star=True)
         else:
-            holder = [func(group_estimation_df, group_event_df, stock) for group_estimation_df, group_event_df, stock in tasks]
+            holder = [func(group_estimation_df, group_event_df, stock) for group_estimation_df, group_event_df, stock in
+                      tasks]
         return pd.concat(holder, axis=1)
 
     # @staticmethod
