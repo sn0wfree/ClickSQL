@@ -109,8 +109,8 @@ class EventStudyUtils(object):
         return estimation_df, event_df
 
     @staticmethod
-    def cal_ar_single_no_split_event(estimation_df, event_df, stock: str, factors=['Mkt_RF'],
-                                     ar_only=True, model=DefaultModel):
+    def cal_ar_multi_no_split_event(estimation_df, event_df, stock: str, factors=['Mkt_RF'],
+                                    ar_only=True, model=DefaultModel):
         if issubclass(model, DefaultModel):
             ar_series = model.real_run(estimation_df, event_df, stock, factors=factors)
         else:
@@ -158,13 +158,13 @@ class EventStudyUtils(object):
         # else:
         #     event_df[f'{stock}_ar'] = ar_series
         #     return event_df
-        return cls.cal_ar_single_no_split_event(estimation_df, event_df, model, stock, factors=factors,
-                                                ar_only=ar_only, )
+        return cls.cal_ar_multi_no_split_event(estimation_df, event_df, model, stock, factors=factors,
+                                               ar_only=ar_only, )
 
     @classmethod
-    def split_event2(cls, return_df: pd.DataFrame, event_dict: dict, date='Date',
-                     factors=['Mkt_RF'],
-                     event_info: tuple = (250, 20, 10, 1)):
+    def group_split_event(cls, return_df: pd.DataFrame, event_dict: dict, date='Date',
+                          factors=['Mkt_RF'],
+                          event_info: tuple = (250, 20, 10, 1)):
         # tasks_pre = ((stock, event_happen_day) for stock, event_happen_day in event_dict.items())
         sub_tasks = {}
         for stock, event_happen_day in event_dict.items():
@@ -204,10 +204,10 @@ class EventStudyUtils(object):
         """
         # func = partial(cls.cal_ar_single, date=date, factors=factors, model=model,
         #                event_info=event_info, ar_only=ar_only)
-        func = partial(cls.cal_ar_single_no_split_event, factors=factors, model=model, ar_only=ar_only)
+        func = partial(cls.cal_ar_multi_no_split_event, factors=factors, model=model, ar_only=ar_only)
 
         # tasks = ((return_df, event_happen_day, stock) for stock, event_happen_day in event_dict.items())
-        tasks = cls.split_event2(return_df, event_dict, date=date, factors=factors, event_info=event_info)
+        tasks = cls.group_split_event(return_df, event_dict, date=date, factors=factors, event_info=event_info)
 
         if boost:
             holder = boost_up(func, tasks, star=True)
