@@ -272,24 +272,28 @@ class EventStudy(EventStudyUtils):
         cols = return_df.columns.tolist()
         new_event_dict = {}
         for k, v in event_dict.items():
-
+            if k not in cols:
+                raise ValueError(f'{k} not found')
+            data_series = return_df[k]
             if isinstance(v, str):
-
                 new_k = k + f"_{pd.to_datetime(v).strftime('%Y%m%d')}"
                 new_event_dict[new_k] = v
-                return_df[new_k] = return_df[k]
+                return_df[new_k] = data_series
             elif isinstance(v, (list, tuple)):
                 v = list(set(v))
 
                 if len(v) >= 1:
+                    # cols = return_df.columns.tolist()
                     # new_event_dict[k] = v
-                    for dt in v:
-                        new_k = k + f"_{pd.to_datetime(dt).strftime('%Y%m%d')}"
-                        if k in cols:
-                            return_df[new_k] = return_df[k]
-                        else:
-                            raise ValueError(f'{k} not found')
-                        new_event_dict[new_k] = dt
+                    new_dt_k_dict = {k + f"_{pd.to_datetime(dt).strftime('%Y%m%d')}": dt for dt in v}
+                    # for dt in v:
+                    #     new_k = k + f"_{pd.to_datetime(dt).strftime('%Y%m%d')}"
+                    extra_return_df = pd.DataFrame([data_series.values.ravel() for _ in v],
+                                                   index=list(new_dt_k_dict.keys()), columns=data_series.index).T
+                    return_df = pd.concat([return_df, extra_return_df], axis=1)
+                    # return_df = return_df.reindex(columns=cols +list(new_dt_k_dict.keys()) ,fill_value=)
+
+                    new_event_dict.update(new_dt_k_dict)
                 else:
                     raise ValueError(f'event list is empty for {k}')
             else:
