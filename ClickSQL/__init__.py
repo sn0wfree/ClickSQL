@@ -5,6 +5,6 @@ from ClickSQL.clickhouse.ClickHouse import ClickHouseTableNode
 from ClickSQL.clickhouse.ClickHouseExt import ClickHouseTableNodeExt
 from ClickSQL.nodes.base import BaseSingleFactorTableNode
 
-__version__ = '0.1.7.10'
+__version__ = '0.1.8.1'
 __author__ = 'sn0wfree'
 __all__ = ['ClickHouseTableNode', 'ClickHouseTableNodeExt', 'BaseSingleFactorTableNode']
