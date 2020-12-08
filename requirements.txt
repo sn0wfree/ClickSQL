@@ -1,3 +1,4 @@
+scipy
 pandas
 numpy
 requests>=2.20.0
