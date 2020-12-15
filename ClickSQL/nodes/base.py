@@ -123,8 +123,8 @@ class BaseSingleFactorBaseNode(object):
     def __sql__(self):
         return self.operator.get_sql(db_table=self.db_table, **self._kwargs)
 
-    def __call__(self, sql, **kwargs):
-        return self.operator(sql, **kwargs)
+    def __call__(self, *sql, **kwargs):
+        return self.operator(*sql, **kwargs)
 
     @property
     def __factor_id__(self):  # add iid function get factor table id
