@@ -1,7 +1,7 @@
 # coding=utf-8
 class GroupSQLUtils(object):
     @staticmethod
-    def group_top(sql: str, by: (str, list, tuple), top=5, cols: (str, None) = None):
+    def group_top(sql: str, by: (str, list, tuple), top: int = 5, cols: (str, None) = None):
         if isinstance(by, str):
             by = [by]
         if cols is None:

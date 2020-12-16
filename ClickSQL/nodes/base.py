@@ -306,9 +306,7 @@ class BaseSingleFactorTableNode(BaseSingleFactorBaseNode):
     )
 
     def __init__(self, src: str, db_table: (None, str) = None, info=None,
-                 fid_ck: str = 'fid',
-                 dt_max_1st: bool = True,
-                 execute: bool = False,
+                 fid_ck: str = 'fid', dt_max_1st: bool = True, execute: bool = False,
                  no_self_update: bool = True, **kwargs):
         super(BaseSingleFactorTableNode, self).__init__(src, db_table=db_table, info=info, **kwargs)
         self._complex = False
@@ -325,7 +323,7 @@ class BaseSingleFactorTableNode(BaseSingleFactorBaseNode):
     def drop_db(self, target: str):
         self.operator(f'drop database if exists {target}')
 
-    def nlargest(self, top, columns, execute=False, extra_cols=None):
+    def nlargest(self, top: int, columns: list, execute: bool = True, extra_cols: (str, None) = None):
         """
         return largest n by columns
         :param extra_cols:
@@ -341,7 +339,7 @@ class BaseSingleFactorTableNode(BaseSingleFactorBaseNode):
         else:
             return sql
 
-    def nsmallest(self, top, columns, execute=False, extra_cols=None):
+    def nsmallest(self, top: int, columns: list, execute: bool = True, extra_cols: (str, None) = None):
         """
         return largest n by columns
         :param extra_cols:
@@ -357,10 +355,7 @@ class BaseSingleFactorTableNode(BaseSingleFactorBaseNode):
         else:
             return sql
 
-    def groupby(self,
-                by: (str, list, tuple),
-                apply_func: (list,),
-                having: (list, tuple, None) = None, execute=True):
+    def groupby(self, by: (str, list, tuple), apply_func: (list,), having: (list, tuple, None) = None, execute=True):
         """
 
         :param execute:
@@ -375,8 +370,17 @@ class BaseSingleFactorTableNode(BaseSingleFactorBaseNode):
         else:
             return sql
 
-    def merge(self, seconds, using: (list, str, tuple), join_type='all full join',
-              cols: (list, str, None) = None, execute=True):
+    def merge(self, seconds, using: (list, str, tuple), join_type='all full join', cols: (list, str, None) = None,
+              execute=True):
+        """
+
+        :param seconds:
+        :param using:
+        :param join_type:
+        :param cols:
+        :param execute:
+        :return:
+        """
         if seconds.lower().startswith('select'):
             pass
         else:

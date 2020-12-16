@@ -1,14 +1,14 @@
+# coding=utf-8
 
 
 class MergeSQLUtils(object):
     # merge table
     @staticmethod
     def _merge(first,
-               seconds: (str),
+               seconds: str,
                using: (list, str, tuple),
                cols: (list, str, None) = None,
                join_type='all full join',
-
                # cols: list,
                #  sample: (int, float, None) = None,
                #  array_join: (list, None) = None,
@@ -32,3 +32,7 @@ class MergeSQLUtils(object):
         #     return self.operator(sql)
         # else:
         return sql
+
+
+if __name__ == '__main__':
+    pass
