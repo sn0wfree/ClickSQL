@@ -325,7 +325,7 @@ class ClickHouseBaseNode(ClickHouseTools):
 
     def get_describe_table(self, db, table):
         describe_sql = 'describe table {}.{}'.format(db, table)
-        describe_table = self.__execute__(describe_sql, convert_to='dataframe', transfer_sql_format=False,
+        describe_table = self.__execute__(describe_sql, convert_to='dataframe', transfer_sql_format=True,
                                           loop=None, to_df=True, raise_error=True)
         # non_nullable_columns = list(describe_table[~describe_table['type'].str.startswith('Nullable')]['name'])
         # integer_columns = list(describe_table[describe_table['type'].str.contains('Int', regex=False)]['name'])
