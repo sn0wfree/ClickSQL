@@ -347,6 +347,9 @@ class ClickHouseBaseNode(ClickHouseTools):
         :return:
         """
         describe_table = self.get_describe_table(db, table)
+        dt_col = describe_table[describe_table['type'].isin('DateTime', 'Nullable(DateTime)')]['name'].values.ravel()
+        for i in dt_col:
+            df[i] = pd.to_datetime(df[i]).dt.strftime('%Y-%m-%d %H:%M:%S')
         row_count = df.shape[0]
         rows_data = (i for i in self._check_df_and_dump(df, describe_table))
         if row_count <= chunksize:
