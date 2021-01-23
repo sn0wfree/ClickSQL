@@ -323,7 +323,7 @@ class ClickHouseBaseNode(ClickHouseTools):
             raise ValueError(f'sql must be str or list or tuple,but get {type(sql)}')
         return result
 
-    def get_describe_table(self, db, table):
+    def get_describe_table(self, db, table, filter=['MATERIALIZED', 'ALIAS']):
         describe_sql = 'describe table {}.{}'.format(db, table)
         describe_table = self.__execute__(describe_sql, convert_to='dataframe', transfer_sql_format=True,
                                           loop=None, to_df=True, raise_error=True)
@@ -334,7 +334,7 @@ class ClickHouseBaseNode(ClickHouseTools):
         # df_columns = list(df.columns)
         # each_row = df.to_dict(orient='records')
         # del df
-        return describe_table  # , integer_columns, non_nullable_columns
+        return describe_table[~describe_table['default_type'].isin(filter)]  # , integer_columns, non_nullable_columns
 
         # return df_columns, each_row
 
