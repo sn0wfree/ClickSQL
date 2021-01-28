@@ -129,7 +129,7 @@ sn0wfree
 7. can execute explain query
 
 ## schedule
-
+1. ORM
 2. create a pandas_liked executable function, which can compatible with pandas 
 3. alter function & drop function
 4. can execute user role query
