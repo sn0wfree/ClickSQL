@@ -347,7 +347,7 @@ class ClickHouseBaseNode(ClickHouseTools):
         :return:
         """
         describe_table = self.get_describe_table(db, table)
-        dt_col = describe_table[describe_table['type'].isin('DateTime', 'Nullable(DateTime)')]['name'].values.ravel()
+        dt_col = describe_table[describe_table['type'].isin(('DateTime', 'Nullable(DateTime)'))]['name'].values.ravel()
         for i in dt_col:
             df[i] = pd.to_datetime(df[i]).dt.strftime('%Y-%m-%d %H:%M:%S')
         row_count = df.shape[0]
