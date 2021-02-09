@@ -287,7 +287,7 @@ class CreateTableFromSQLUtils(object):
         #     primary_key_expr = ','.join(primary_key_cols)
         #     primary_by_clause = f"PRIMARY BY ({primary_key_expr})"
         if isinstance(select_or_dtypes_dict, dict):
-            cols_def = ','.join([f"{name} {d_type}" for name, d_type in select_or_dtypes_dict.items()])
+            cols_def = ','.join([f"`{name}` {d_type}" for name, d_type in select_or_dtypes_dict.items()])
             main_body = f"CREATE TABLE IF NOT EXISTS {db}.{table} {on_cluster} ( {cols_def} ) ENGINE = {engine_type}"
             tail = ''
         elif isinstance(select_or_dtypes_dict, str) and select_or_dtypes_dict.lower().startswith('select'):
@@ -575,7 +575,7 @@ class CreateTableFromInfoUtils(object):
         :return:
         """
         default = ''
-        cols_def = ','.join([f"{var} {v}" for var, v in var_dict.items()])
+        cols_def = ','.join([f"`{var}` {v}" for var, v in var_dict.items()])
 
         order_by_clause = CreateBuilder._assemble_conditions_clause('ORDER BY', order_by_cols, default=default)
         sample_clause = CreateBuilder._assemble_conditions_clause('SAMPLE BY', sample_by_cols, default=default)

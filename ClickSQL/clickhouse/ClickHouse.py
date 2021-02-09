@@ -341,6 +341,7 @@ class ClickHouseBaseNode(ClickHouseTools):
     def insert_df(self, df: pd.DataFrame, db: str, table: str, chunksize=100000):
         """
         ## TODO need to test
+        ## todo need test suitable chunksize
         :param df:  data for inserted
         :param db: target database
         :param table:  target table
@@ -404,7 +405,7 @@ class ClickHouseBaseNode(ClickHouseTools):
                     loop=None, to_df: bool = True, raise_error=True):
         """
         the core execute function to run the whole requests and SQL or a list of SQL.
-        :param sql:
+        :param sql: String or list or tuple
         :param convert_to:
         :param transfer_sql_format:
         :param loop:
