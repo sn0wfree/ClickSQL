@@ -86,17 +86,13 @@ class BaseSingleFactorBaseNode(object):
         self.status = 'SQL'
         self._INFO = info
 
+    @wraps(ClickHouseTableNodeExt.insert_df)
     def insert_df(self, *args, **kwargs):
         self.operator.insert_df(*args, **kwargs)
 
     # create table
+    @wraps(ClickHouseTableNodeExt.create)
     def create(self, *args, **kwargs):
-        """
-        create table functions
-        :param args:
-        :param kwargs:
-        :return:
-        """
         return self.operator.create(*args, **kwargs)
 
     def _update(self, **kwargs):
@@ -314,6 +310,10 @@ class BaseSingleFactorTableNode(BaseSingleFactorBaseNode):
         self._dt_max_1st = dt_max_1st
         self._execute = execute
         self._no_self_update = no_self_update
+
+    def execute(self, sql):
+        ## add execute usage
+        return self.operator(sql)
 
     def drop_table(self, target: str):
         if '.' not in target:
