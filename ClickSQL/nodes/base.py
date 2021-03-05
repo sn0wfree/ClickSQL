@@ -119,6 +119,23 @@ class BaseSingleFactorBaseNode(object):
     def __sql__(self):
         return self.operator.get_sql(db_table=self.db_table, **self._kwargs)
 
+    def decorate(self, target_conn_args='conn'):
+        def afunc(func):
+
+            def _afunc(*args, **kwargs):
+                if target_conn_args in kwargs.keys():
+                    if kwargs[target_conn_args] is None:
+                        kwargs[target_conn_args] = self.operator
+                    elif callable(kwargs[target_conn_args]):
+                        pass
+                    else:
+                        raise KeyError(f'target variable:{target_conn_args} had been setup into other value! ')
+                else:
+                    raise KeyError(f'cannot find target variable:{target_conn_args} ')
+                return func(*args, **kwargs)
+            return _afunc
+        return afunc
+
     def __call__(self, *sql, **kwargs):
         return self.operator(*sql, **kwargs)
 
