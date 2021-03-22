@@ -69,22 +69,35 @@ class BaseSingleFactorBaseNode(object):
 
         if db_table is None:
             src_db_table = self.operator.db_table
-            if '.' in src_db_table:
-                self.db_table = src_db_table
-            else:
-                raise ValueError('db_table parameter get wrong type!')
+            db_table_all, db, table = self.db_split(src_db_table)
+            # if '.' in src_db_table:
+            #     self.db_table = src_db_table
+            # else:
+            #     raise ValueError('db_table parameter get wrong type!')
         elif isinstance(db_table, str):
-            self.db_table = db_table
+            db_table_all, db, table = self.db_split(db_table)
         else:
             raise ValueError('db_table only accept str!')
-        db, table = self.db_table.split('.')
+        self.db_table = db_table_all
+        # db, table = self.db_table.split('.')
         self.db = db
         self.table = table
-        self.depend_tables = [self.db_table]
+        # self.depend_tables = [self.db_table]
         self._kwargs = kwargs
         self._raw_kwargs = kwargs
         self.status = 'SQL'
         self._INFO = info
+
+    @staticmethod
+    def db_split(src_db_table):
+        if isinstance(src_db_table, str):
+            if '.' in src_db_table:
+                db, table = src_db_table.split('.')
+                return src_db_table, db, table
+            else:
+                return f"{src_db_table}.None", src_db_table, 'None'
+        else:
+            raise ValueError('db_table parameter get wrong type! only accept str')
 
     @wraps(ClickHouseTableNodeExt.insert_df)
     def insert_df(self, *args, **kwargs):
@@ -133,7 +146,9 @@ class BaseSingleFactorBaseNode(object):
                 else:
                     raise KeyError(f'cannot find target variable:{target_conn_args} ')
                 return func(*args, **kwargs)
+
             return _afunc
+
         return afunc
 
     def __call__(self, *sql, **kwargs):
