@@ -277,6 +277,150 @@ class BaseSingleFactorBaseNode(object):
         else:
             raise ClickHouseTableNotExistsError(f'{self.db_table} is not exists!')
 
+    def nlargest(self, top: int, columns: list, execute: bool = True, extra_cols: (str, None) = None):
+        """
+        return largest n by columns
+        :param extra_cols:
+        :param top:
+        :param columns:
+        :param execute:
+        :return:
+        """
+        by = [f'{c} desc' for c in columns]
+        sql = GroupSQLUtils.group_top(self.__sql__, by=by, top=top, cols=extra_cols)
+        if execute:
+            return self.operator(sql)
+        else:
+            return sql
+
+    def nsmallest(self, top: int, columns: list, execute: bool = True, extra_cols: (str, None) = None):
+        """
+        return largest n by columns
+        :param extra_cols:
+        :param top:
+        :param columns:
+        :param execute:
+        :return:
+        """
+        by = [f'{c} asc' for c in columns]
+        sql = GroupSQLUtils.group_top(self.__sql__, by=by, top=top, cols=extra_cols)
+        if execute:
+            return self.operator(sql)
+        else:
+            return sql
+
+    def groupby(self, by: (str, list, tuple), apply_func: (list,), having: (list, tuple, None) = None, execute=True):
+        """
+
+        :param execute:
+        :param by:
+        :param apply_func:
+        :param having:
+        :return:
+        """
+        sql = GroupSQLUtils.group_by(self.__sql__, by=by, apply_func=apply_func, having=having)
+        if execute:
+            return self.operator(sql)
+        else:
+            return sql
+
+    def merge(self, seconds, using: (list, str, tuple), join_type='all full join', cols: (list, str, None) = None,
+              execute=True):
+        """
+
+        :param seconds:
+        :param using:
+        :param join_type:
+        :param cols:
+        :param execute:
+        :return:
+        """
+        if seconds.lower().startswith('select'):
+            pass
+        else:
+            seconds = f" select * from {seconds}"
+        sql = MergeSQLUtils._merge(self, seconds, using=using, join_type=join_type, cols=cols)
+        if execute:
+            return self.operator(sql)
+        else:
+            return sql
+
+    # update table
+    def __lshift__(self, src_db_table):
+        print('lshift')
+        fid_ck = self._fid_ck
+        dt_max_1st = self._dt_max_1st
+        execute = self._execute
+        no_self_update = self._no_self_update
+
+        if isinstance(src_db_table, str):
+            src_conn = copy.deepcopy(self.operator._src).replace(self.db_table, src_db_table)
+            src_db_table = BaseSingleFactorBaseNode(src_conn, cols=['*'])
+        elif isinstance(src_db_table, BaseSingleFactorBaseNode):
+            pass
+        else:
+            raise ValueError('src_db_table is not valid! please check!')
+
+        if src_db_table.empty:
+            raise ValueError(f'{src_db_table.db_table} is empty')
+        # check two table are same
+        if no_self_update and self.db_table == src_db_table.db_table and self.__factor_id__ == src_db_table.__factor_id__:
+            dst = src_db_table.db_table
+            src = self.db_table
+            raise ValueError(
+                f'Detect self-update process! these operator attempts to update data from {src} to {dst}')
+
+        update_status = 'full' if self.empty else 'incremental'
+
+        func = getattr(UpdateSQLUtils, f'{update_status}_update')
+        sql = func(src_db_table, self.db_table, fid_ck, dt_max_1st=dt_max_1st)
+        if execute:
+            self.operator(sql)
+        return sql, update_status
+
+    # update table
+    def __rshift__(self, dst_db_table: str):
+        """
+
+        UpdateSQLUtils
+
+        :param dst_db_table:
+        :return:
+        """
+        # print('rshift')
+        fid_ck = self._fid_ck
+        dt_max_1st = self._dt_max_1st
+        execute = self._execute
+        no_self_update = self._no_self_update
+        if self.empty:
+            raise ValueError(f'{self.db_table} is empty')
+
+        if isinstance(dst_db_table, str):
+            dst_conn = copy.deepcopy(self.operator._src)
+            dst_db_table = BaseSingleFactorBaseNode(
+                dst_conn.replace(self.db_table, dst_db_table),
+                cols=['*']
+            )
+        elif isinstance(dst_db_table, BaseSingleFactorBaseNode):
+            pass
+        else:
+            raise ValueError('dst_db_table is not valid! please check!')
+        # check two table are same
+        if no_self_update and self.db_table == dst_db_table.db_table:
+            if self.__factor_id__ == dst_db_table.__factor_id__:
+                dst = dst_db_table.db_table
+                src = self.db_table
+                raise ValueError(
+                    f'Detect self-update process! these operator attempts to update data from {src} to {dst}')
+
+        update_status = 'full' if dst_db_table.empty else 'incremental'
+
+        func = getattr(UpdateSQLUtils, f'{update_status}_update')
+        sql = func(self, dst_db_table, fid_ck, dt_max_1st=dt_max_1st)
+        if execute:
+            self.operator(sql)
+        return sql, update_status
+
 
 # class BaseSingleFactorNode(BaseSingleFactorBaseNode):
 #     __slots__ = (
@@ -354,150 +498,6 @@ class BaseSingleFactorTableNode(BaseSingleFactorBaseNode):
 
     def drop_db(self, target: str):
         self.operator(f'drop database if exists {target}')
-
-    def nlargest(self, top: int, columns: list, execute: bool = True, extra_cols: (str, None) = None):
-        """
-        return largest n by columns
-        :param extra_cols:
-        :param top:
-        :param columns:
-        :param execute:
-        :return:
-        """
-        by = [f'{c} desc' for c in columns]
-        sql = GroupSQLUtils.group_top(self.__sql__, by=by, top=top, cols=extra_cols)
-        if execute:
-            return self.operator(sql)
-        else:
-            return sql
-
-    def nsmallest(self, top: int, columns: list, execute: bool = True, extra_cols: (str, None) = None):
-        """
-        return largest n by columns
-        :param extra_cols:
-        :param top:
-        :param columns:
-        :param execute:
-        :return:
-        """
-        by = [f'{c} asc' for c in columns]
-        sql = GroupSQLUtils.group_top(self.__sql__, by=by, top=top, cols=extra_cols)
-        if execute:
-            return self.operator(sql)
-        else:
-            return sql
-
-    def groupby(self, by: (str, list, tuple), apply_func: (list,), having: (list, tuple, None) = None, execute=True):
-        """
-
-        :param execute:
-        :param by:
-        :param apply_func:
-        :param having:
-        :return:
-        """
-        sql = GroupSQLUtils.group_by(self.__sql__, by=by, apply_func=apply_func, having=having)
-        if execute:
-            return self.operator(sql)
-        else:
-            return sql
-
-    def merge(self, seconds, using: (list, str, tuple), join_type='all full join', cols: (list, str, None) = None,
-              execute=True):
-        """
-
-        :param seconds:
-        :param using:
-        :param join_type:
-        :param cols:
-        :param execute:
-        :return:
-        """
-        if seconds.lower().startswith('select'):
-            pass
-        else:
-            seconds = f" select * from {seconds}"
-        sql = MergeSQLUtils._merge(self, seconds, using=using, join_type=join_type, cols=cols)
-        if execute:
-            return self.operator(sql)
-        else:
-            return sql
-
-    # update table
-    def __lshift__(self, src_db_table: BaseSingleFactorBaseNode):
-        print('lshift')
-        fid_ck = self._fid_ck
-        dt_max_1st = self._dt_max_1st
-        execute = self._execute
-        no_self_update = self._no_self_update
-
-        if isinstance(src_db_table, str):
-            src_conn = copy.deepcopy(self.operator._src).replace(self.db_table, src_db_table)
-            src_db_table = BaseSingleFactorBaseNode(src_conn, cols=['*'])
-        elif isinstance(src_db_table, BaseSingleFactorBaseNode):
-            pass
-        else:
-            raise ValueError('src_db_table is not valid! please check!')
-
-        if src_db_table.empty:
-            raise ValueError(f'{src_db_table.db_table} is empty')
-        # check two table are same
-        if no_self_update and self.db_table == src_db_table.db_table and self.__factor_id__ == src_db_table.__factor_id__:
-            dst = src_db_table.db_table
-            src = self.db_table
-            raise ValueError(
-                f'Detect self-update process! these operator attempts to update data from {src} to {dst}')
-
-        update_status = 'full' if self.empty else 'incremental'
-
-        func = getattr(UpdateSQLUtils, f'{update_status}_update')
-        sql = func(src_db_table, self.db_table, fid_ck, dt_max_1st=dt_max_1st)
-        if execute:
-            self.operator(sql)
-        return sql, update_status
-
-    # update table
-    def __rshift__(self, dst_db_table: str):
-        """
-
-        UpdateSQLUtils
-
-        :param dst_db_table:
-        :return:
-        """
-        # print('rshift')
-        fid_ck = self._fid_ck
-        dt_max_1st = self._dt_max_1st
-        execute = self._execute
-        no_self_update = self._no_self_update
-        if self.empty:
-            raise ValueError(f'{self.db_table} is empty')
-
-        if isinstance(dst_db_table, str):
-            dst_conn = copy.deepcopy(self.operator._src)
-            dst_db_table = BaseSingleFactorBaseNode(
-                dst_conn.replace(self.db_table, dst_db_table),
-                cols=['*']
-            )
-        elif isinstance(dst_db_table, BaseSingleFactorBaseNode):
-            pass
-        else:
-            raise ValueError('dst_db_table is not valid! please check!')
-        # check two table are same
-        if no_self_update and self.db_table == dst_db_table.db_table:
-            if self.__factor_id__ == dst_db_table.__factor_id__:
-                dst = dst_db_table.db_table
-                src = self.db_table
-                raise ValueError(
-                    f'Detect self-update process! these operator attempts to update data from {src} to {dst}')
-
-        update_status = 'full' if dst_db_table.empty else 'incremental'
-
-        func = getattr(UpdateSQLUtils, f'{update_status}_update')
-        sql = func(self, dst_db_table, fid_ck, dt_max_1st=dt_max_1st)
-        if execute:
-            self.operator(sql)
-        return sql, update_status
 
 
 ## https://zhuanlan.zhihu.com/p/297623539
