@@ -8,6 +8,22 @@ CIK = namedtuple('CoreIndexKeys', ('dts', 'iid'))
 FactorInfo = namedtuple('FactorInfo', ('db_table', 'dts', 'iid', 'origin_factor_names', 'alias', 'sql', 'conditions'))
 
 
+def SmartDataFrame(df: pd.DataFrame, db_table: str, dts: str, iid: str, origin_factor_names: str, alias: str, sql: str,
+                   conditions: str):
+    sproperty = {'_db_table': property(lambda x: db_table),
+                 '_cik_dt': property(lambda x: dts),
+                 '_cik_iid': property(lambda x: iid),
+                 '_origin_factor_names': property(lambda x: origin_factor_names),
+                 '_alias': property(lambda x: alias),
+                 '_sql': property(lambda x: sql),
+                 '_conditions': property(lambda x: conditions),
+
+                 }
+
+    result_cls = type('SmartDataFrame', (pd.DataFrame,), sproperty)
+    return result_cls(df)
+
+
 class FatctorTable(object):
     __Name__ = "基础因子库单因子表"
 
@@ -29,11 +45,17 @@ class FatctorTable(object):
             self._checked = True
 
     def __check_cik__(self, cik_dt=None, cik_iid=None):
-        if cik_dt is None and self._checked:
+        if cik_dt is not None:
+            pass
+
+        elif cik_dt is None or self._checked:
             cik_dt = self._cik.dts
         else:
             raise NotImplementedError('cik_dt is not setup!')
-        if cik_iid is None and self._checked:
+
+        if cik_iid is not None:
+            pass
+        elif cik_iid is None and self._checked:
             cik_iid = self._cik.iid
         else:
             raise NotImplementedError('cik_iid is not setup!')
@@ -108,13 +130,60 @@ class FatctorTable(object):
     def show_factors(self):
         return pd.DataFrame(self._factors, columns=FactorInfo._fields)
 
-    def __auto_merge__(self):
-        cols = ['db_table', 'dts', 'iid', 'conditions']
+    # def reshape_factors(self, factors: list):
+    #     self._factors = []
+    #     for kw in factors:
+
+    def show_reduced_factors(self):
+        # ('db_table', 'dts', 'iid', 'origin_factor_names', 'alias', 'sql', 'conditions')
+        # ['db_table', 'dts', 'iid', 'conditions']
+        cols = list(FactorInfo._fields[:3]) + [FactorInfo._fields[-1]]
+
         f = self.show_factors()
-        can_merged_index = f.groupby(cols).count() > 1
-        no_duplicates_df = f.eval( "+".join(cols))
+        fgroupby = f.groupby(cols)
+        # can_merged_index = (fgroupby['sql'].count() > 1).reset_index()
+        # can_merged_index = can_merged_index[can_merged_index['sql']]
+        can_merged_index = fgroupby.count().index
+        factors = []
+        for db_table, dts, iid, conditions in can_merged_index.values:
+            masks = (f['db_table'] == db_table) & (f['dts'] == dts) & (f['iid'] == iid) & (
+                    f['conditions'] == conditions)
+            cc = f[masks][['origin_factor_names', 'alias']].apply(lambda x: ','.join(x))
+            origin_factor_names = cc['origin_factor_names'].split(',')
+            alias = cc['alias'].split(',')
+            origin_factor_names_new, alias_new = zip(*list(set(zip(origin_factor_names, alias))))
+            alias_new = list(map(lambda x: x if x != 'None' else None, alias_new))
+
+            cik_dt, cik_iid = self.__check_cik__(cik_dt=dts, cik_iid=iid)
+            res = self._get_factor_without_check(db_table, origin_factor_names_new, cik_dt=cik_dt, cik_iid=cik_iid,
+                                                 conds=conditions, as_alias=alias_new)
+            factors.append(res)
+
+        return pd.DataFrame(factors, columns=FactorInfo._fields)
+
+        # no_duplicates_df = f.eval("+".join(cols))
         ## todo auto merge same condition,dbtable,dts,iid
-        return can_merged_index
+        # return can_merged_index
+
+    def obtain(self, reduced=True, add_limit=True):
+        if reduced:
+            factors = self.show_reduced_factors()
+        else:
+            factors = self.show_factors()
+
+        for db_table, dts, iid, origin_factor_names, alias, sql, conditions in factors.values:
+            if add_limit:
+                sql = f'select * from ({sql}) limit 100'
+            df = self._node(sql)
+            res = SmartDataFrame(df, db_table, dts, iid, origin_factor_names, alias, sql, conditions)
+
+            # ['db_table', 'dts', 'iid', 'origin_factor_names', 'alias', 'sql', 'conditions']
+            yield res
+
+    def obtain_merged(self, reduced=True, add_limit=True):
+        return pd.concat(
+            map(lambda x: x.set_index(['cik_dt', 'cik_iid']), self.obtain(reduced=reduced, add_limit=add_limit)),
+            axis=1)
 
 
 if __name__ == '__main__':
