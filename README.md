@@ -83,12 +83,7 @@ insert data into database by various ways
 from ClickSQL import BaseSingleFactorTableNode as factortable
 import numpy as np
 import pandas as pd
-factor = factortable(
-        'clickhouse://default:default@127.0.0.1:8123/sample.sample',
-        cols=['cust_no', 'product_id', 'money'],
-        order_by_cols=['money asc'],
-        money='money >= 100000'
-    )
+factor = factortable( 'clickhouse://default:default@127.0.0.1:8123/sample.sample'  )
 db = 'sample'
 table = 'sample'
 df  = pd.DataFrame(np.random.random(size=(10000,3)),columns=['cust_no', 'product_id', 'money'])
@@ -101,12 +96,7 @@ factor.insert_df(df, db, table, chunksize=100000)
 ```python
 from ClickSQL import BaseSingleFactorTableNode as factortable
 
-factor = factortable(
-        'clickhouse://default:default@127.0.0.1:8123/sample.sample',
-        cols=['cust_no', 'product_id', 'money'],
-        order_by_cols=['money asc'],
-        money='money >= 100000'
-    )
+factor = factortable( 'clickhouse://default:default@127.0.0.1:8123/sample.sample'  )
 
 factor("insert into sample.sample select * from other_db.other_table")
     
