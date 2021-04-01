@@ -17,69 +17,39 @@ more information for ClickHouse can be found at [here](http://clickhouse.tech)
 `pip install ClickSQL`
 
 ## Usage
-### initial connection
+### Initial connection
+to setup a database connection and send a heartbeat-check signal
 
-#### *Approach 1*
 ```python
-from ClickSQL import ClickHouseTableNode
+from ClickSQL import BaseSingleFactorTableNode
 
 conn_str = "clickhouse://default:test121231@99.99.9.9:8123/system"
-ct = ClickHouseTableNode(conn_str)
+Node = BaseSingleFactorTableNode(conn_str)
 
 >>> connection test:  Ok.
 
 ``` 
 
-#### *Approach 2*
-```python
-from ClickSQL import ClickHouseTableNode
-
-
-
-conn_str = {'name':'clickhouse','host':'99.99.9.9','port':8123,'user':'default',
-            'password':'test121231','database':'system'}
-ct = ClickHouseTableNode(**conn_str)
-
->>> connection test:  Ok.
-
-``` 
 ### Query
-
+#### execute a SQL Query
 ```python
-from ClickSQL import ClickHouseTableNode
+from ClickSQL import BaseSingleFactorTableNode
 
 conn_str = "clickhouse://default:test121231@99.99.9.9:8123/system"
-ct = ClickHouseTableNode(conn_str)
+Node = BaseSingleFactorTableNode(conn_str)
 
-ct.query('show tables from system limit 1')
+Node('show tables from system limit 1')
 
 >>> connection test:  Ok.
 >>>                             name
 >>> 0  aggregate_function_combinators
 ```
 
-## update
-
-```python
-from ClickSQL import BaseSingleFactorTableNode as factortable
-
-factor = factortable(
-        'clickhouse://default:default@127.0.0.1:8123/sample.sample',
-        cols=['cust_no', 'product_id', 'money'],
-        order_by_cols=['money asc'],
-        money='money >= 100000'
-    )
-
-factor >> 'test.test'
-    
-
-```
-
-
+#### execute a Query without SQL
 ```python
 from ClickSQL import BaseSingleFactorTableNode
 
-factor = factortable(
+factor = BaseSingleFactorTableNode(
         'clickhouse://default:default@127.0.0.1:8123/sample.sample',
         cols=['cust_no', 'product_id', 'money'],
         order_by_cols=['money asc'],
@@ -104,6 +74,76 @@ factor['money'].head(10)
 
 
 ```
+
+
+## Insert data
+insert data into database by various ways
+### Insert data via DataFrame
+```python
+from ClickSQL import BaseSingleFactorTableNode as factortable
+import numpy as np
+import pandas as pd
+factor = factortable(
+        'clickhouse://default:default@127.0.0.1:8123/sample.sample',
+        cols=['cust_no', 'product_id', 'money'],
+        order_by_cols=['money asc'],
+        money='money >= 100000'
+    )
+db = 'sample'
+table = 'sample'
+df  = pd.DataFrame(np.random.random(size=(10000,3)),columns=['cust_no', 'product_id', 'money'])
+factor.insert_df(df, db, table, chunksize=100000)
+    
+
+```
+
+### Insert data via SQL(Inner)
+```python
+from ClickSQL import BaseSingleFactorTableNode as factortable
+
+factor = factortable(
+        'clickhouse://default:default@127.0.0.1:8123/sample.sample',
+        cols=['cust_no', 'product_id', 'money'],
+        order_by_cols=['money asc'],
+        money='money >= 100000'
+    )
+
+factor("insert into sample.sample select * from other_db.other_table")
+    
+
+```
+
+### Create table
+
+#### Create table by SQL
+```python
+from ClickSQL import BaseSingleFactorTableNode
+
+conn_str = "clickhouse://default:test121231@99.99.9.9:8123/system"
+Node = BaseSingleFactorTableNode(conn_str)
+
+Node('create table test.test2 (v1 String, v2 Int64, v3 Float64,v4 DataTime) Engine=MergeTree() order by v4')
+```
+
+#### Create table by DataFrame
+```python
+from ClickSQL import BaseSingleFactorTableNode
+import numpy as np
+import pandas as pd
+
+conn_str = "clickhouse://default:test121231@99.99.9.9:8123/system"
+Node = BaseSingleFactorTableNode(conn_str)
+db = 'test'
+table = 'test2'
+
+
+df_or_sql_or_dict  = pd.DataFrame(np.random.random(size=(10000,2)),columns=['v1', 'v3'])
+df_or_sql_or_dict['v2'] =1
+df_or_sql_or_dict['v4'] =pd.to_datetime('2020-01-01 00:00:00')
+
+Node.create( db,  table,  df_or_sql_or_dict,    key_cols=['v4'],)
+```
+
 
 ### Contribution
 there is welcome to do more work to improve this package more convenient
