@@ -1,7 +1,7 @@
 # coding=utf-8
 
 from ClickSQL.nodes.base import BaseSingleFactorBaseNode
-from collections import namedtuple, deque
+from collections import namedtuple, deque, Callable
 import pandas as pd
 
 CIK = namedtuple('CoreIndexKeys', ('dts', 'iid'))
@@ -140,6 +140,26 @@ class _Factors(deque):
         else:
             return factors
 
+    def fetch_iter(self, query, filter_cond_dts, filter_cond__ids, reduced=True, add_limit=False):
+        if not isinstance(query, Callable):
+            raise ValueError('query must database connector with __call__')
+
+        factors = self.show_factors(reduced=reduced, to_df=False)
+
+        for db_table, dts, iid, origin_factor_names, alias, sql, conditions in factors:
+            ## todo 可能存在性能点
+            if add_limit:
+                sql2 = f"select * from ({sql}) where {filter_cond_dts} and {filter_cond__ids} limit 100"
+            else:
+                sql2 = f"select * from ({sql}) where {filter_cond_dts} and {filter_cond__ids}"
+
+            df = query(sql2)
+            res = SmartDataFrame(df, db_table, dts, iid, origin_factor_names, alias, sql, conditions).set_index(
+                ['cik_dt', 'cik_iid'])
+
+            # ['db_table', 'dts', 'iid', 'origin_factor_names', 'alias', 'sql', 'conditions']
+            yield res
+
 
 class FatctorTable(FactorCheckHelper):
     __Name__ = "基础因子库单因子表"
@@ -155,7 +175,10 @@ class FatctorTable(FactorCheckHelper):
         self._checked = False
         self.__auto_check_cik__()
         self._factors = _Factors()
-        self.append = self.add_factor
+        # self.append = self.add_factor
+
+        self._cik_dts = None
+        self._cik_iids = None
 
     def __auto_check_cik__(self):
         if not self._checked and (self._cik.dts is None or self._cik.iid is None):
@@ -193,8 +216,9 @@ class FatctorTable(FactorCheckHelper):
     # def getDB(self, db):
     #     self.db = db
 
-    def add_factor(self, db_table, factor_names: (list, tuple, str), cik_dt=None, cik_iid=None, conds: str = '1',
+    def add_factor(self, db_table, factor_names: (list, tuple, str), cik_dt=None, cik_iid=None,
                    as_alias: (list, tuple, str) = None):
+        conds = '1'  # not allow to set conds
         cik_dt, cik_iid = self.check_cik_dt(cik_dt=cik_dt, default_cik_dt=self._cik.dts), self.check_cik_iid(
             cik_iid=cik_iid, default_cik_iid=self._cik.iid)
         res = self._factors._get_factor_without_check(db_table, factor_names, cik_dt=cik_dt, cik_iid=cik_iid,
@@ -208,27 +232,37 @@ class FatctorTable(FactorCheckHelper):
         ## todo auto merge same condition,dbtable,dts,iid
         # return can_merged_index
 
-    def obtain_iterable(self, reduced=True, add_limit=True):
-        factors = self.show_factors(reduced=reduced, to_df=False)
+    def fetch(self, reduced=True, add_limit=True):
+        return pd.concat(
+            self._factors.fetch_iter(self._node, self.cik_dt, self.cik_iid, reduced=reduced,
+                                     add_limit=add_limit), axis=1)
 
-        for db_table, dts, iid, origin_factor_names, alias, sql, conditions in factors:
-            if add_limit:
-                sql = f'select * from ({sql}) limit 100'
-            df = self._node(sql)
-            res = SmartDataFrame(df, db_table, dts, iid, origin_factor_names, alias, sql, conditions).set_index(
-                ['cik_dt', 'cik_iid'])
+    @property
+    def cik_dt(self):
+        dt_format = "%Y%m%d"
+        if self._cik_dts is None:
+            return "  1 "
 
-            # ['db_table', 'dts', 'iid', 'origin_factor_names', 'alias', 'sql', 'conditions']
-            yield res
+        else:
+            cik_dts_str = "','".join(map(lambda x: x.strftime(dt_format), pd.to_datetime(self._cik_dts)))
+            return f" cik_dt in ('{cik_dts_str}') "
 
-    def obtain_merged(self, reduced=True, add_limit=True):
-        return pd.concat(self.obtain_iterable(reduced=reduced, add_limit=add_limit), axis=1)
-
+    @cik_dt.setter
     def set_cik_dt(self, cik_dt: list):
+        self._cik_dts = cik_dt
 
-        pass
+    @property
+    def cik_iid(self):
+        if self._cik_iids is None:
+            return "  1 "
 
+        else:
+            cik_dts_str = "','".join(map(lambda x: x, self._cik_iids))
+            return f" cik_iid in ('{cik_dts_str}') "
+
+    @cik_iid.setter
     def set_cik_iid(self, cik_iid: list):
+        self._cik_iids = cik_iid
         pass
 
     # def where(self, cik_dt: list = None, cik_iid: list = None, cik_dt_format="%Y%m%d"):
