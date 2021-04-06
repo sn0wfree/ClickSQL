@@ -232,6 +232,10 @@ class FatctorTable(FactorCheckHelper):
         ## todo auto merge same condition,dbtable,dts,iid
         # return can_merged_index
 
+    def __iter__(self):
+        return self._factors.fetch_iter(self._node, self.cik_dt, self.cik_iid, reduced=True,
+                                       add_limit=False)
+
     def fetch(self, reduced=True, add_limit=True):
         return pd.concat(
             self._factors.fetch_iter(self._node, self.cik_dt, self.cik_iid, reduced=reduced,
@@ -257,8 +261,8 @@ class FatctorTable(FactorCheckHelper):
             return "  1 "
 
         else:
-            cik_dts_str = "','".join(map(lambda x: x, self._cik_iids))
-            return f" cik_iid in ('{cik_dts_str}') "
+            cik_iid_str = "','".join(map(lambda x: x, self._cik_iids))
+            return f" cik_iid in ('{cik_iid_str}') "
 
     @cik_iid.setter
     def set_cik_iid(self, cik_iid: list):
