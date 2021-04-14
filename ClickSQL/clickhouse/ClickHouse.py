@@ -9,7 +9,7 @@ import json
 import os
 import pandas as pd
 import requests
-from aiohttp import ClientSession
+
 from functools import partial, partialmethod
 
 from ClickSQL.errors import ParameterKeyError, ParameterTypeError, DatabaseTypeError, DatabaseError, \
@@ -27,8 +27,12 @@ try:
     import nest_asyncio
 
     nest_asyncio.apply()  # allow run at jupyter and asyncio env
+    engage_asyncio = True
+    from aiohttp import ClientSession
 except Exception as e:
-    warnings.warn('cannot run at jupyter or asyncio env')
+    warnings.warn('cannot run at jupyter or asyncio env! will use normal version!')
+    engage_asyncio = False
+    from requests import Session as ClientSession
 
 node_parameters = ('host', 'port', 'user', 'password', 'database')
 node = namedtuple('clickhouse', node_parameters)
@@ -245,7 +249,26 @@ class ClickHouseBaseNode(ClickHouseTools):
             print('connection test: ', ret_value.text.strip())
         del ret_value
 
-    async def _post(self, url: str, sql: str, session, raise_error: bool = True):
+    def _post(self, url: str, sql: str, session, raise_error: bool = True):
+        if self.http_settings['enable_http_compression'] == 1:
+            with session.post(url, data=gzip.compress(sql.encode()),
+                              headers={'Content-Encoding': 'gzip',
+                                       'Accept-Encoding': 'gzip'}) as resp:
+                result = resp.content
+        else:
+            with session.post(url, body=sql.encode(), ) as resp:
+                result = resp.content
+
+        result = SmartBytes(result, resp.status_code)
+        # reason = resp.reason
+        if result.status_code != 200:
+            if raise_error and GLOBAL_RAISE_ERROR:
+                raise DatabaseError(result)
+            else:
+                warnings.warn(str(result))
+        return result
+
+    async def _post_async(self, url: str, sql: str, session, raise_error: bool = True):
         """
         the async way to send post request to the server
         :param url:
@@ -271,8 +294,29 @@ class ClickHouseBaseNode(ClickHouseTools):
                 warnings.warn(str(result))
         return result
 
-    async def _compression_switched_request(self, query_with_format: (tuple, list, str), convert_to: str = 'dataframe',
-                                            transfer_sql_format: bool = True, sem=None, raise_error=True):
+    def _compression_switched_request(self, query_with_format: (tuple, list, str), convert_to: str = 'dataframe',
+                                      transfer_sql_format: bool = True, sem=None, raise_error=True):
+
+        url = self._connect_url + '/?' + parse.urlencode(self.http_settings)
+        transfer_sql = partial(self._transfer_sql_format, convert_to=convert_to,
+                               transfer_sql_format=transfer_sql_format)
+        # if sem is None:
+        #     sem = asyncio.Semaphore(SEMAPHORE)  # limit async num
+        # async with sem:  # limit async number
+        with ClientSession() as session:
+            if isinstance(query_with_format, str):
+                result = self._post(url, transfer_sql(query_with_format), session,
+                                    raise_error=raise_error)
+            elif isinstance(query_with_format, (tuple, list)):
+                result = [self._post(url, transfer_sql(sql), session, raise_error=raise_error) for sql
+                          in query_with_format]
+            else:
+                raise ValueError('query_with_format must be str , list or tuple')
+        return result
+
+    async def _compression_switched_request_async(self, query_with_format: (tuple, list, str),
+                                                  convert_to: str = 'dataframe',
+                                                  transfer_sql_format: bool = True, sem=None, raise_error=True):
         """
         the core request operator with compression switch adaptor
 
@@ -290,9 +334,11 @@ class ClickHouseBaseNode(ClickHouseTools):
         async with sem:  # limit async number
             async with ClientSession() as session:
                 if isinstance(query_with_format, str):
-                    result = await self._post(url, transfer_sql(query_with_format), session, raise_error=raise_error)
+                    result = await self._post_async(url, transfer_sql(query_with_format), session,
+                                                    raise_error=raise_error)
                 elif isinstance(query_with_format, (tuple, list)):
-                    result = [await self._post(url, transfer_sql(sql), session, raise_error=raise_error) for sql in
+                    result = [await self._post_async(url, transfer_sql(sql), session, raise_error=raise_error) for sql
+                              in
                               query_with_format]
                 else:
                     raise ValueError('query_with_format must be str , list or tuple')
@@ -412,14 +458,18 @@ class ClickHouseBaseNode(ClickHouseTools):
         :param to_df:
         :return:
         """
-
-        sem = asyncio.Semaphore(SEMAPHORE)  # limit async num
-        resp_list = self._compression_switched_request(sql, convert_to=convert_to,
-                                                       transfer_sql_format=transfer_sql_format, sem=sem,
-                                                       raise_error=raise_error)
-        if loop is None:
-            loop = asyncio.get_event_loop()  # init loop
-        res = loop.run_until_complete(resp_list)
+        if engage_asyncio:
+            sem = asyncio.Semaphore(SEMAPHORE)  # limit async num
+            resp_list = self._compression_switched_request_async(sql, convert_to=convert_to,
+                                                                 transfer_sql_format=transfer_sql_format, sem=sem,
+                                                                 raise_error=raise_error)
+            if loop is None:
+                loop = asyncio.get_event_loop()  # init loop
+            res = loop.run_until_complete(resp_list)
+        else:
+            res = self._compression_switched_request(sql, convert_to=convert_to,
+                                                     transfer_sql_format=transfer_sql_format, sem=None,
+                                                     raise_error=raise_error)
         result = self._load_into_pd_ext(sql, res, convert_to, to_df=to_df)
         return result
 

@@ -234,7 +234,7 @@ class FatctorTable(FactorCheckHelper):
 
     def __iter__(self):
         return self._factors.fetch_iter(self._node, self.cik_dt, self.cik_iid, reduced=True,
-                                       add_limit=False)
+                                       add_limit=True)
 
     def fetch(self, reduced=True, add_limit=True):
         return pd.concat(
