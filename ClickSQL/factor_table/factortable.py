@@ -160,6 +160,34 @@ class _Factors(deque):
             # ['db_table', 'dts', 'iid', 'origin_factor_names', 'alias', 'sql', 'conditions']
             yield res
 
+    def fetch_sql(self, query, filter_cond_dts, filter_cond__ids, reduced=True, add_limit=False):
+        if not isinstance(query, Callable):
+            raise ValueError('query must database connector with __call__')
+        factors = self.show_factors(reduced=reduced, to_df=False)
+        sql_list = []
+        for db_table, dts, iid, origin_factor_names, alias, sql, conditions in factors:
+            ## todo 可能存在性能点
+            if add_limit:
+                sql2 = f"select * from ({sql}) where {filter_cond_dts} and {filter_cond__ids} limit 100"
+            else:
+                sql2 = f"select * from ({sql}) where {filter_cond_dts} and {filter_cond__ids}"
+            sql_list.append(sql2)
+
+        from functools import reduce
+
+        def join(sql1, sql2):
+            settings = ' settings join'
+            sql = f"select * from ({sql1}) all full join ({sql2}) using (cik_dt,cik_iid)  {settings}"
+            return sql
+
+        s = reduce(lambda x, y: join(x, y), sql_list)
+        df = query(s)
+        res = SmartDataFrame(df, db_table, dts, iid, origin_factor_names, alias, sql, conditions).set_index(
+            ['cik_dt', 'cik_iid'])
+
+        # ['db_table', 'dts', 'iid', 'origin_factor_names', 'alias', 'sql', 'conditions']
+        yield res
+
 
 class FatctorTable(FactorCheckHelper):
     __Name__ = "基础因子库单因子表"
@@ -175,6 +203,8 @@ class FatctorTable(FactorCheckHelper):
         self._checked = False
         self.__auto_check_cik__()
         self._factors = _Factors()
+
+        self._strict_cik = True if 'strict_cik' not in kwargs.keys() else kwargs['strict_cik']
         # self.append = self.add_factor
 
         self._cik_dts = None
@@ -234,9 +264,24 @@ class FatctorTable(FactorCheckHelper):
 
     def __iter__(self):
         return self._factors.fetch_iter(self._node, self.cik_dt, self.cik_iid, reduced=True,
-                                       add_limit=True)
+                                        add_limit=False)
 
-    def fetch(self, reduced=True, add_limit=True):
+    def head(self, reduced=True, ):
+        """
+        quick look top data
+        :param reduced:
+        :return:
+        """
+
+        return self.fetch(self, reduced=reduced, add_limit=True)
+
+    def fetch(self, reduced=True, add_limit=False):
+        if self._strict_cik:
+            if self._cik_dts is None:
+                raise KeyError('cik_dts is not setup!')
+            if self._cik_iids is None:
+                raise KeyError('cik_iids is not setup!')
+
         return pd.concat(
             self._factors.fetch_iter(self._node, self.cik_dt, self.cik_iid, reduced=reduced,
                                      add_limit=add_limit), axis=1)
