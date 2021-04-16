@@ -10,6 +10,7 @@ import os
 import pandas as pd
 import requests
 
+from ClickSQL.conf import Config
 from functools import partial, partialmethod
 
 from ClickSQL.errors import ParameterKeyError, ParameterTypeError, DatabaseTypeError, DatabaseError, \
@@ -23,14 +24,17 @@ this scripts will use none of clickhouse client and only depend on requests to m
 clickhouse-server
 
 """
-try:
-    import nest_asyncio
-
-    nest_asyncio.apply()  # allow run at jupyter and asyncio env
-    engage_asyncio = True
-    from aiohttp import ClientSession
-except Exception as e:
-    warnings.warn('cannot run at jupyter or asyncio env! will use normal version!')
+if  Config['engage_asyncio'] == 'True':
+    try:
+        import nest_asyncio
+        nest_asyncio.apply()  # allow run at jupyter and asyncio env
+        engage_asyncio = True
+        from aiohttp import ClientSession
+    except Exception as e:
+        warnings.warn('cannot run at jupyter or asyncio env! will use normal version!')
+        engage_asyncio = False
+        from requests import Session as ClientSession
+else:
     engage_asyncio = False
     from requests import Session as ClientSession
 
