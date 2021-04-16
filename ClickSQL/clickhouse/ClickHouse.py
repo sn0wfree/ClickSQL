@@ -415,7 +415,7 @@ class ClickHouseBaseNode(ClickHouseTools):
         #
         # query_with_format = 'insert into {0} format JSONEachRow \n{1}'.format(db_table, json_each_row)
         # del json_each_row
-        self.__execute__(*query_with_format, transfer_sql_format=False, loop=None, to_df=False, raise_error=True)
+        self.__execute__(query_with_format, transfer_sql_format=False, loop=None, to_df=False, raise_error=True)
 
         # conn = self._create_conn()
         # self._test_connection(conn)
