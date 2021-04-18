@@ -2,7 +2,7 @@
 # coding=utf8
 import responder
 
-from ClickSQL.nodes.base import BaseSingleFactorBaseNode
+from ClickSQL.nodes.base import BaseSingleQueryBaseNode
 
 conn_settings = 'clickhouse://default:Imsn0wfree@47.104.186.157:8123/system.columns'
 # Tables =
@@ -13,7 +13,7 @@ api = responder.API()
 #         resp.text = f"{greeting}, world!"
 #         resp.headers.update({'X-Life': '42'})
 #         resp.status_code = api.status_codes.HTTP_416
-operator = BaseSingleFactorBaseNode(conn_settings, cols=[])
+operator = BaseSingleQueryBaseNode(conn_settings, cols=[])
 
 # @api.route("/{greeting}")
 # class Service(object):
