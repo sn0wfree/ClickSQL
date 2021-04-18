@@ -5,10 +5,8 @@
 Package information:
 
  
-ClickSQL is a smart client for ClickHouse database, which may help users to use ClickHouse more easier and smoother. 
-
-
-more information for ClickHouse can be found at [here](http://clickhouse.tech)
+ClickSQL is a smart client for ClickHouse database, which may help users to use ClickHouse more easier and pythonic. 
+More information for ClickHouse can be found at [here](http://clickhouse.tech)
 
 
 
@@ -136,39 +134,42 @@ Node.create( db,  table,  df_or_sql_or_dict,    key_cols=['v4'],)
 
 
 ### Contribution
-there is welcome to do more work to improve this package more convenient
+Welcome to improve this package or submit an issue or any others
 
 ## Author
 sn0wfree
 
-## functions
+
+
+
+# Plan
+## Available functions or properties
 1. get data from clickhouse
 2. insert data into clickhouse
 3. create 
 4. alter
-
-
-# Plan
-## Available function 
-1. access clickhouse service
-2. execute standard SQL and transform into dataframe
+5. execute standard SQL and transform into DataFrame(Auto)
 3. able to execute select query 
 4. able to execute insert query 
 5. no require clickhouse-client
 6. auto create table sql
 7. can execute explain query
+8. Insert Data via DataFrame
+3. alter function & drop function
+
+## In Process
+2. create a pandas_liked executable function, which can compatible with pandas 
+9. distributed query（query+insert）
+
 
 ## schedule
 1. ORM
-2. create a pandas_liked executable function, which can compatible with pandas 
-3. alter function & drop function
 4. can execute user role query
 5. create analysis component
 6. auto report system
 7. table register system
 8. data manager system
 8. meta data manager
-9. distributed query（query+insert）
 
 
 
