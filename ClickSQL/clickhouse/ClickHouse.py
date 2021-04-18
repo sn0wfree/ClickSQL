@@ -3,16 +3,16 @@ import gzip
 import warnings
 from collections import namedtuple
 from urllib import parse
-import numpy as np
+
 import asyncio
 import json
+import numpy as np
 import os
 import pandas as pd
 import requests
-
-from ClickSQL.conf import Config
 from functools import partial, partialmethod
 
+from ClickSQL.conf import Config
 from ClickSQL.errors import ParameterKeyError, ParameterTypeError, DatabaseTypeError, DatabaseError, \
     HeartbeatCheckFailure, ClickHouseTableNotExistsError
 # from ClickSQL.utils.file_cache import file_cache
@@ -24,9 +24,10 @@ this scripts will use none of clickhouse client and only depend on requests to m
 clickhouse-server
 
 """
-if  Config['engage_asyncio'] == 'True':
+if Config['engage_asyncio'] == 'True':
     try:
         import nest_asyncio
+
         nest_asyncio.apply()  # allow run at jupyter and asyncio env
         engage_asyncio = True
         from aiohttp import ClientSession
@@ -174,6 +175,8 @@ class ClickHouseTools(object):
             updated_settings.update(extra_settings)
 
         return {k: v * 1 if isinstance(v, bool) else v for k, v in updated_settings.items()}
+
+
 
 
 class ClickHouseBaseNode(ClickHouseTools):

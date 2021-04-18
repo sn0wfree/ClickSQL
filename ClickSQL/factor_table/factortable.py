@@ -1,6 +1,6 @@
 # coding=utf-8
 
-from ClickSQL.nodes.base import BaseSingleFactorBaseNode
+from ClickSQL.nodes.base import BaseSingleQueryBaseNode
 from collections import namedtuple, deque, Callable
 import pandas as pd
 
@@ -194,7 +194,7 @@ class FatctorTable(FactorCheckHelper):
 
     def __init__(self, *args, **kwargs):
         # super(FatctorTable, self).__init__(*args, **kwargs)
-        self._node = BaseSingleFactorBaseNode(*args, **kwargs)
+        self._node = BaseSingleQueryBaseNode(*args, **kwargs)
 
         cik_dt = None if 'cik_dt' not in kwargs.keys() else kwargs['cik_dt']
         cik_iid = None if 'cik_iid' not in kwargs.keys() else kwargs['cik_iid']
