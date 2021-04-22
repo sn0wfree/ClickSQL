@@ -34,10 +34,10 @@ ft_node = namedtuple('factortable', factor_parameters)
 
 
 class DelayTasks(deque):
-    def __init__(self, *args, **kwargs):
+    def __init__(self,_query, *args, **kwargs):
         super(DelayTasks, self).__init__(*args, **kwargs)
 
-        self._query = None
+        self._query = _query
 
     def run(self, no_yield=False):
         result = (self._query(sql) for sql in self)
@@ -103,8 +103,8 @@ class BaseSingleQueryBaseNode(object):
         self.status = 'SQL'
         self._INFO = info
 
-        self.delay_tasks = DelayTasks()
-        self.delay_tasks._query = self.operator
+        self.delay_tasks = DelayTasks(self.operator)
+        # self.delay_tasks._query = self.operator
 
     @staticmethod
     def _db_split(src_db_table):
@@ -218,6 +218,11 @@ class BaseSingleQueryBaseNode(object):
         return res
 
     def _detect_complex_sql(self, warn=False):
+        """
+        detect complex sql
+        :param warn:
+        :return:
+        """
         sql = self.__sql__.lower()
         if 'select' in sql and len(sql.split('select ')) >= complex_sql_select_count:
             if warn:
