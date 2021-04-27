@@ -165,18 +165,20 @@ class _Factors(deque):
             raise ValueError('query must database connector with __call__')
         factors = self.show_factors(reduced=reduced, to_df=False)
         sql_list = []
-        for db_table, dts, iid, origin_factor_names, alias, sql, conditions in factors:
+        if add_limit:
             ## todo 可能存在性能点
-            if add_limit:
+            for db_table, dts, iid, origin_factor_names, alias, sql, conditions in factors:
                 sql2 = f"select * from ({sql}) where {filter_cond_dts} and {filter_cond__ids} limit 100"
-            else:
+                sql_list.append(sql2)
+        else:
+            for db_table, dts, iid, origin_factor_names, alias, sql, conditions in factors:
                 sql2 = f"select * from ({sql}) where {filter_cond_dts} and {filter_cond__ids}"
-            sql_list.append(sql2)
+                sql_list.append(sql2)
 
         from functools import reduce
 
         def join(sql1, sql2):
-            settings = ' settings join'
+            settings = ' settings joined_subquery_requires_alias=0 '
             sql = f"select * from ({sql1}) all full join ({sql2}) using (cik_dt,cik_iid)  {settings}"
             return sql
 
@@ -273,7 +275,7 @@ class FatctorTable(FactorCheckHelper):
         :return:
         """
 
-        return self.fetch(self, reduced=reduced, add_limit=True)
+        return self.fetch(reduced=reduced, add_limit=True)
 
     def fetch(self, reduced=True, add_limit=False):
         if self._strict_cik:

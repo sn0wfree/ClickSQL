@@ -339,8 +339,7 @@ class CreateTableFromSQLUtils(object):
         return df
 
     @staticmethod
-    def _translate_dtypes_from_df(df: pd.DataFrame,
-                                  translate_dtypes=None):
+    def _translate_dtypes_from_df(df: pd.DataFrame, translate_dtypes=None):
         """
 
         :param df:
