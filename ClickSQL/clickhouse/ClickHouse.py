@@ -15,7 +15,6 @@ from functools import partial, partialmethod
 from ClickSQL.conf import Config
 from ClickSQL.errors import ParameterKeyError, ParameterTypeError, DatabaseTypeError, DatabaseError, \
     HeartbeatCheckFailure, ClickHouseTableNotExistsError
-# from ClickSQL.utils.file_cache import file_cache
 from ClickSQL.utils import cached_property, file_cache, parse_rfc1738_args
 
 """
@@ -47,24 +46,27 @@ PRINT_CHECK_RESULT = os.environ.get('PRINT_CHECK_RESULT', default=True)
 GLOBAL_RAISE_ERROR = os.environ.get('GLOBAL_RAISE_ERROR', default=True)
 SEMAPHORE = os.environ.get('SEMAPHORE', default=10)  # control async number for whole query list
 
-
-# class SmartResult(object):
-#
-#     def __init__(self, result, status_code: int):
-#         self._obj = result
-#         self.status_code = status_code
+DEFAULT_CONNECT_SETTINGS = {'enable_http_compression': 1, 'send_progress_in_http_headers': 0,
+                            'log_queries': 1, 'connect_timeout': 10, 'receive_timeout': 300,
+                            'send_timeout': 300, 'output_format_json_quote_64bit_integers': 0,
+                            'wait_end_of_query': 0}
 
 
-def SmartBytes(result: bytes, status_code: int):
-    result_cls = type('SmartBytes', (bytes,), {'status_code': property(lambda x: status_code)})
-
-    return result_cls(result)
+# def SmartBytes(result: bytes, status_code: int):
+#     result_cls = type('SmartBytes', (bytes,), {'status_code': property(lambda x: status_code)})
+#     return result_cls(result)
 
 
 # TODO change to queue mode change remove aiohttp depends
-class ClickHouseTools(object):
+class ClickHouseHelper(object):
     @staticmethod
-    def _check_df_and_dump(df, describe_table):
+    def _check_df_and_dump(df: pd.DataFrame, describe_table: pd.DataFrame):
+        """
+
+        :param df:
+        :param describe_table:
+        :return:
+        """
         describe_table = describe_table[~describe_table['default_type'].isin(['MATERIALIZED', 'ALIAS'])]
         non_nullable_columns = list(describe_table[~describe_table['type'].str.startswith('Nullable')]['name'])
         integer_columns = list(describe_table[describe_table['type'].str.contains('Int', regex=False)]['name'])
@@ -94,7 +96,7 @@ class ClickHouseTools(object):
             yield json.dumps(row, ensure_ascii=False)
 
     @staticmethod
-    def _check_sql_type(sql: str):
+    def _check_sql_type(sql: str) -> str:
         if sql.lower().startswith(available_queries_select):
             return 'select-liked'
         elif sql.lower().startswith(available_queries_insert):
@@ -104,7 +106,7 @@ class ClickHouseTools(object):
             raise ValueError('sql type cannot be supported! need upgrade!')
 
     @staticmethod
-    def _transfer_sql_format(sql: str, convert_to: str, transfer_sql_format: bool = True):
+    def _transfer_sql_format(sql: str, convert_to: str, transfer_sql_format: bool = True) -> str:
         """
         provide a method which will translate a standard sql into clickhouse sql with might use format as suffix
         :param sql:
@@ -148,7 +150,7 @@ class ClickHouseTools(object):
 
     @classmethod
     def _merge_settings(cls, settings: (None, dict), updated_settings: (None, dict) = None,
-                        extra_settings: (None, dict) = None):
+                        extra_settings: (None, dict) = None) -> dict:
         """
 
         :param settings:
@@ -177,14 +179,7 @@ class ClickHouseTools(object):
         return {k: v * 1 if isinstance(v, bool) else v for k, v in updated_settings.items()}
 
 
-
-
-class ClickHouseBaseNode(ClickHouseTools):
-    _default_settings = {'enable_http_compression': 1, 'send_progress_in_http_headers': 0,
-                         'log_queries': 1, 'connect_timeout': 10, 'receive_timeout': 300,
-                         'send_timeout': 300, 'output_format_json_quote_64bit_integers': 0,
-                         'wait_end_of_query': 0}
-
+class ClickHouseBaseNode(ClickHouseHelper):
     __slots__ = ('_db', '_connect_url', '_para', 'http_settings')  # 'max_async_query_once', 'is_closed'
 
     def __init__(self, **db_settings):
@@ -208,18 +203,16 @@ class ClickHouseBaseNode(ClickHouseTools):
                                                                           passwd=self._para.password,
                                                                           host=self._para.host,
                                                                           port=self._para.port)
-        self.http_settings = self._merge_settings(None, updated_settings=self._default_settings,
+        self.http_settings = self._merge_settings(None, updated_settings=DEFAULT_CONNECT_SETTINGS,
                                                   extra_settings={'user': self._para.user,
                                                                   'password': self._para.password})
-        # self.max_async_query_once = 5
-        # self.is_closed = False
         _base_url = "http://{host}:{port}/?".format(host=self._para.host, port=int(self._para.port))
         self.__heartbeat_test__(_base_url)
         self._heartbeat_test_ = partialmethod(self.__heartbeat_test__, _base_url=_base_url)
         self.cache_query = partialmethod(self.execute, enable_cache=True, exploit_func=True)
 
     @staticmethod
-    def _check_db_settings_(db_settings: dict, available_db_type=(node.__name__,)):  # node.__name__ : clickhouse
+    def _check_db_settings_(db_settings: dict, available_db_type=(node.__name__,)):
         """
         it is to check db setting whether is correct!
         :param db_settings:
@@ -266,12 +259,12 @@ class ClickHouseBaseNode(ClickHouseTools):
             with session.post(url, body=sql.encode(), ) as resp:
                 result = resp.content
 
-        result = SmartBytes(result, resp.status_code)
         # reason = resp.reason
-        if result.status_code != 200:
+        if resp.status != 200:
             if raise_error and GLOBAL_RAISE_ERROR:
                 raise DatabaseError(result)
             else:
+                # result = SmartBytes(result, resp.status_code)
                 warnings.warn(str(result))
         return result
 
@@ -292,9 +285,9 @@ class ClickHouseBaseNode(ClickHouseTools):
             async with session.post(url, body=sql.encode(), ) as resp:
                 result = await resp.read()
 
-        result = SmartBytes(result, resp.status)
+        # result = SmartBytes(result, resp.status)
         # reason = resp.reason
-        if result.status_code != 200:
+        if resp.status != 200:
             if raise_error and GLOBAL_RAISE_ERROR:
                 raise DatabaseError(result)
             else:
@@ -389,12 +382,11 @@ class ClickHouseBaseNode(ClickHouseTools):
         # del df
         return describe_table[~describe_table['default_type'].isin(filter)]  # , integer_columns, non_nullable_columns
 
-        # return df_columns, each_row
-
-    def insert_df(self, df: pd.DataFrame, db: str, table: str, chunksize=100000):
+    def insert_df(self, df: pd.DataFrame, db: str, table: str, chunksize: int = 100000):
         """
         ## TODO need to test
         ## todo need test suitable chunksize
+        :param chunksize:
         :param df:  data for inserted
         :param db: target database
         :param table:  target table
@@ -407,52 +399,13 @@ class ClickHouseBaseNode(ClickHouseTools):
         row_count = df.shape[0]
         rows_data = (i for i in self._check_df_and_dump(df, describe_table))
         if row_count <= chunksize:
-
-            # df_columns, each_row = self._check_df(df, describe_table)
-
             query_with_format = ['insert into {0} format JSONEachRow \n{1}'.format('{}.{}'.format(db, table), '\n'.join(
                 list(rows_data)))]
         else:
             from ClickSQL.utils.chunk import chunk
             query_with_format = ['insert into {0} format JSONEachRow \n{1}'.format('{}.{}'.format(db, table), '\n'.join(
                 data)) for data in chunk(list(rows_data), chunksize)]
-
-        # json_each_row = '\n'.join([json.dumps(i, ensure_ascii=False) for i in each_row])
-        # del each_row
-        #
-        # query_with_format = 'insert into {0} format JSONEachRow \n{1}'.format(db_table, json_each_row)
-        # del json_each_row
         self.__execute__(query_with_format, transfer_sql_format=False, loop=None, to_df=False, raise_error=True)
-
-        # conn = self._create_conn()
-        # self._test_connection(conn)
-        # # self._check_sql_select_only(sql)
-        #
-        # updated_settings = self.settings
-        #
-        # # http_get_params = {'user': components.username, 'password': components.password}
-        # # http_get_params.update(updated_settings)
-        # # conn = http.client.HTTPConnection(components.hostname, port=components.port)
-        #
-        # conn = self._compression_switched_request(query_with_format, conn, updated_settings, self.http_get_params)
-        #
-        # # if updated_settings['enable_http_compression'] == 1:
-        # #     conn.request('POST', '/?' + urllib.parse.urlencode(http_get_params),
-        # #                  body=gzip.compress(query_with_format.encode()),
-        # #                  headers={'Content-Encoding': 'gzip', 'Accept-Encoding': 'gzip'})
-        # # else:
-        # #     conn.request('POST', '/?' + urllib.parse.urlencode(http_get_params), body=query_with_format.encode())
-        # resp = conn.getresponse()
-        #
-        # if resp.status != 200:
-        #     error_message = gzip.decompress(resp.read()).decode() if updated_settings['enable_http_compression'] == 1 \
-        #         else resp.read().decode()
-        #     conn.close()
-        #     raise NotImplementedError('Unknown Error: status: {0}, reason: {1}, message: {2}'.format(
-        #         resp.status, resp.reason, error_message))
-        #
-        # conn.close()
-        # print('Done.')
 
     def __execute__(self, sql: (str, list, tuple), convert_to: str = 'dataframe', transfer_sql_format: bool = True,
                     loop=None, to_df: bool = True, raise_error=True):
@@ -495,28 +448,10 @@ class ClickHouseBaseNode(ClickHouseTools):
         :return:
         """
 
-        # detect whether all query are insert process
-        # insert_process = map(lambda x: x.lower().startswith(available_queries_insert), sql)
-        # # detect whether all query are select process
-        # select_process = map(lambda x: x.lower().startswith(available_queries_select), sql)
-        # if all(list(select_process)) is True:
-        #     to_df = transfer_sql_format = True
-        # elif all(list(insert_process)) is True:
-        #     to_df = transfer_sql_format = False
-        # else:
-        #
-        #     raise ValueError(
-        #         'the list of queries must be same type query! currently cannot handle various kind SQL type'
-        #         'combination')
         func = file_cache(enable_cache=enable_cache, exploit_func=exploit_func)(self.__execute__)
         result = func(sql, convert_to=convert_to, transfer_sql_format=True, loop=loop,
                       to_df=True * output_df, raise_error=raise_error)
-
-        if len(sql) == 1:
-            return result[0]
-        else:
-
-            return result
+        return result[0] if len(sql) == 1 else result
 
     def __call__(self, *args, **kwargs):
         """
@@ -546,13 +481,10 @@ class ClickHouseBaseNode(ClickHouseTools):
 
 
 class ClickHouseTableNode(ClickHouseBaseNode):
+    __slots__ = ('_db', '_connect_url', '_para', 'http_settings', '_table')  # 'max_async_query_once', 'is_closed'
 
-    def __init__(self, conn_str: (str, dict, None) = None, **kwargs):
-        """
-        add kwargs to contain db settings
-        :param conn_str:
-        :param kwargs:
-        """
+    @staticmethod
+    def __parse_conn_str__(conn_str: (str, dict, None) = None, **kwargs):
         if conn_str is None:
             if kwargs != {}:
                 db_settings = kwargs
@@ -565,7 +497,15 @@ class ClickHouseTableNode(ClickHouseBaseNode):
             db_settings = conn_str
         else:
             raise ParameterTypeError(f'conn_str must be str or dict but get: {type(conn_str)}')
+        return db_settings
 
+    def __init__(self, conn_str: (str, dict, None) = None, **kwargs):
+        """
+        add kwargs to contain db settings
+        :param conn_str:
+        :param kwargs:
+        """
+        db_settings = self.__parse_conn_str__(conn_str=conn_str, **kwargs)
         if db_settings['port'] is None:  # add default port for clickhouse
             db_settings['port'] = 8123
         super(ClickHouseTableNode, self).__init__(**db_settings)
@@ -643,11 +583,7 @@ class ClickHouseTableNode(ClickHouseBaseNode):
                 sql = f"show tables from {db}"
                 tables = self.query(sql).values.ravel().tolist()
                 return table in tables
-            # else:
-            # else:
-            #     return db in self.databases
         else:
-
             return db in self.databases
 
 
