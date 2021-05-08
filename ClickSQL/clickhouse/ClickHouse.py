@@ -40,12 +40,13 @@ else:
 
 node_parameters = ('host', 'port', 'user', 'password', 'database')
 node = namedtuple('clickhouse', node_parameters)
-available_queries_select = ('select', 'show', 'desc')
-available_queries_insert = ('insert', 'optimize', 'create')
+
 PRINT_CHECK_RESULT = os.environ.get('PRINT_CHECK_RESULT', default=True)
 GLOBAL_RAISE_ERROR = os.environ.get('GLOBAL_RAISE_ERROR', default=True)
 SEMAPHORE = os.environ.get('SEMAPHORE', default=10)  # control async number for whole query list
 
+available_queries_select = ('select', 'show', 'desc')
+available_queries_insert = ('insert', 'optimize', 'create')
 DEFAULT_CONNECT_SETTINGS = {'enable_http_compression': 1, 'send_progress_in_http_headers': 0,
                             'log_queries': 1, 'connect_timeout': 10, 'receive_timeout': 300,
                             'send_timeout': 300, 'output_format_json_quote_64bit_integers': 0,
@@ -300,9 +301,6 @@ class ClickHouseBaseNode(ClickHouseHelper):
         url = self._connect_url + '/?' + parse.urlencode(self.http_settings)
         transfer_sql = partial(self._transfer_sql_format, convert_to=convert_to,
                                transfer_sql_format=transfer_sql_format)
-        # if sem is None:
-        #     sem = asyncio.Semaphore(SEMAPHORE)  # limit async num
-        # async with sem:  # limit async number
         with ClientSession() as session:
             if isinstance(query_with_format, str):
                 result = self._post(url, transfer_sql(query_with_format), session,
@@ -358,29 +356,33 @@ class ClickHouseBaseNode(ClickHouseHelper):
         if not to_df:
             result = ret_value
         elif isinstance(sql, str):
-            if ret_value != b'' and ret_value.status_code == 200:
+            # status code has been removed, if status code != 200 will raise error at post func !
+            if ret_value != b'':
                 result = cls._load_into_pd(ret_value, convert_to)
             else:
                 result = ret_value
         elif isinstance(sql, (list, tuple)):
-            result = [cls._load_into_pd(s, convert_to) if s != b'' and s.status_code == 200 else s for s in
-                      ret_value]
+            result = [cls._load_into_pd(s, convert_to) if s != b'' else s for s in ret_value]
         else:
             raise ValueError(f'sql must be str or list or tuple,but get {type(sql)}')
         return result
 
-    def get_describe_table(self, db, table, filter=['MATERIALIZED', 'ALIAS']):
-        describe_sql = 'describe table {}.{}'.format(db, table)
-        describe_table = self.__execute__(describe_sql, convert_to='dataframe', transfer_sql_format=True,
+    def get_describe_table(self, db, table, filter_type=None):
+        """
+
+        :param db:
+        :param table:
+        :param filter_type:
+        :return:
+        """
+        if filter_type is None:
+            filter_type = ['MATERIALIZED', 'ALIAS']
+
+        describe_table = self.__execute__(f'describe table {db}.{table}', convert_to='dataframe',
+                                          transfer_sql_format=True,
                                           loop=None, to_df=True, raise_error=True)
-        # non_nullable_columns = list(describe_table[~describe_table['type'].str.startswith('Nullable')]['name'])
-        # integer_columns = list(describe_table[describe_table['type'].str.contains('Int', regex=False)]['name'])
-        # missing_in_df = {i: np.where(df[i].isnull(), 1, 0).sum() for i in non_nullable_columns}
-        #
-        # df_columns = list(df.columns)
-        # each_row = df.to_dict(orient='records')
-        # del df
-        return describe_table[~describe_table['default_type'].isin(filter)]  # , integer_columns, non_nullable_columns
+        return describe_table[
+            ~describe_table['default_type'].isin(filter_type)]  # , integer_columns, non_nullable_columns
 
     def insert_df(self, df: pd.DataFrame, db: str, table: str, chunksize: int = 100000):
         """
