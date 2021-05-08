@@ -3,15 +3,17 @@ import os
 import json
 from ClickSQL.utils import singleton, uuid_hash
 
+PREFIX = 'CONFIG:'
+
 
 @singleton
 class Conf(object):
 
     def __setitem__(self, key: str, value):
-        os.environ['CONFIG:' + uuid_hash(key).upper()] = json.dumps(value)
+        os.environ[PREFIX + uuid_hash(key).upper()] = json.dumps(value)
 
     def __getitem__(self, item: str):
-        result = os.getenv('CONFIG:' + uuid_hash(item).upper())
+        result = os.getenv(PREFIX + uuid_hash(item).upper())
         if result is None:
             return result
         else:
@@ -26,7 +28,7 @@ class Conf(object):
         :return:
         """
 
-        key_str = 'CONFIG:' + uuid_hash(key).upper()
+        key_str = PREFIX + uuid_hash(key).upper()
         result = os.environ.get(key_str, default=default)
         if result is None:
             return None
@@ -37,7 +39,7 @@ class Conf(object):
     @staticmethod
     def set(key: str, value):
 
-        key_str = 'CONFIG:' + uuid_hash(key).upper()
+        key_str = PREFIX + uuid_hash(key).upper()
 
         os.environ[key_str] = json.dumps(value)
 
@@ -49,13 +51,12 @@ class Conf(object):
 
     @staticmethod
     def show_configs():
-        return {k: os.getenv(k) for k in filter(lambda x: x.startswith('CONFIG:') and len(x) == 39, os.environ.keys())}
+        return {k: os.getenv(k) for k in filter(lambda x: x.startswith(PREFIX) and len(x) == 39, os.environ.keys())}
 
 
 Config = Conf()
 
 if __name__ == '__main__':
-
     # C = Conf()
     # C.test = '1'
     #
