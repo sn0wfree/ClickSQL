@@ -245,7 +245,7 @@ class ClickHouseBaseNode(ClickHouseHelper):
         ret_value = requests.get(_base_url)
         status_code = ret_value.status_code
         if status_code != 200:
-            raise HeartbeatCheckFailure(f'heartbeat check failure at {_base_url}')
+            raise HeartbeatCheckFailure(f'heartbeat check failure at {_base_url} with status code: {status_code}')
         if PRINT_CHECK_RESULT:
             print('connection test: ', ret_value.text.strip())
         del ret_value
