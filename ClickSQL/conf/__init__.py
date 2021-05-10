@@ -9,15 +9,23 @@ PREFIX = 'CONFIG:'
 @singleton
 class Conf(object):
 
+    def __setattr__(self, key: str, value):
+        self.set(key, value)
+
     def __setitem__(self, key: str, value):
-        os.environ[PREFIX + uuid_hash(key).upper()] = json.dumps(value)
+        self.set(key, value)
+        # os.environ[PREFIX + uuid_hash(key).upper()] = json.dumps(value)
+
+    def __getattr__(self, item):
+        return self.get(item)
 
     def __getitem__(self, item: str):
-        result = os.getenv(PREFIX + uuid_hash(item).upper())
-        if result is None:
-            return result
-        else:
-            return json.loads(result)
+        return self.get(item)
+        # result = os.getenv(PREFIX + uuid_hash(item).upper())
+        # if result is None:
+        #     return result
+        # else:
+        #     return json.loads(result)
 
     @staticmethod
     def get(key: str, default=None):
@@ -29,11 +37,10 @@ class Conf(object):
         """
 
         key_str = PREFIX + uuid_hash(key).upper()
-        result = os.environ.get(key_str, default=default)
+        result = os.environ.get(key_str, default=None)
         if result is None:
-            return None
+            return default
         else:
-
             return json.loads(result)
 
     @staticmethod
@@ -42,12 +49,6 @@ class Conf(object):
         key_str = PREFIX + uuid_hash(key).upper()
 
         os.environ[key_str] = json.dumps(value)
-
-    def __setattr__(self, key: str, value: str):
-        self.__setitem__(key, value)
-
-    def __getattr__(self, item: str):
-        return self.__getitem__(self, item)
 
     @staticmethod
     def show_configs():

@@ -23,27 +23,26 @@ this scripts will use none of clickhouse client and only depend on requests to m
 clickhouse-server
 
 """
-if Config['engage_asyncio'] == 'True':
+if Config.get('ENGAGE_ASYNC', default=False):
     try:
         import nest_asyncio
-
         nest_asyncio.apply()  # allow run at jupyter and asyncio env
-        engage_asyncio = True
+        engage_async = True
         from aiohttp import ClientSession
     except Exception as e:
-        warnings.warn('cannot run at jupyter or asyncio env! will use normal version!')
-        engage_asyncio = False
+        warnings.warn('Cannot run at jupyter or asyncio env! will use normal version instead!')
+        engage_async = False
         from requests import Session as ClientSession
 else:
-    engage_asyncio = False
+    engage_async = False
     from requests import Session as ClientSession
 
 node_parameters = ('host', 'port', 'user', 'password', 'database')
 node = namedtuple('clickhouse', node_parameters)
 
-PRINT_CHECK_RESULT = os.environ.get('PRINT_CHECK_RESULT', default=True)
-GLOBAL_RAISE_ERROR = os.environ.get('GLOBAL_RAISE_ERROR', default=True)
-SEMAPHORE = os.environ.get('SEMAPHORE', default=10)  # control async number for whole query list
+PRINT_CHECK_RESULT = Config.get('PRINT_CHECK_RESULT', default=True)
+GLOBAL_RAISE_ERROR = Config.get('GLOBAL_RAISE_ERROR', default=True)
+SEMAPHORE = Config.get('SEMAPHORE', default=10)  # control async number for whole query list
 
 available_queries_select = ('select', 'show', 'desc')
 available_queries_insert = ('insert', 'optimize', 'create')
@@ -420,7 +419,7 @@ class ClickHouseBaseNode(ClickHouseHelper):
         :param to_df:
         :return:
         """
-        if engage_asyncio:
+        if engage_async:
             sem = asyncio.Semaphore(SEMAPHORE)  # limit async num
             resp_list = self._compression_switched_request_async(sql, convert_to=convert_to,
                                                                  transfer_sql_format=transfer_sql_format, sem=sem,
