@@ -260,7 +260,7 @@ class ClickHouseBaseNode(ClickHouseHelper):
                 result = resp.content
 
         # reason = resp.reason
-        if resp.status != 200:
+        if resp.status_code != 200:
             if raise_error and GLOBAL_RAISE_ERROR:
                 raise DatabaseError(result)
             else:
@@ -287,7 +287,7 @@ class ClickHouseBaseNode(ClickHouseHelper):
 
         # result = SmartBytes(result, resp.status)
         # reason = resp.reason
-        if resp.status != 200:
+        if resp.status_code != 200:
             if raise_error and GLOBAL_RAISE_ERROR:
                 raise DatabaseError(result)
             else:
