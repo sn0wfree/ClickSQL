@@ -109,7 +109,7 @@ class _Factors(deque):
             # ['db_table', 'dts', 'iid', 'conditions']
             cols = list(FactorInfo._fields[:3]) + [FactorInfo._fields[-1]]
 
-            f = pd.DataFrame(self, columns=FactorInfo._fields)
+            f = pd.DataFrame(list(self), columns=FactorInfo._fields)
             factor_name_col = FactorInfo._fields[3]
             alias_col = FactorInfo._fields[4]
 
