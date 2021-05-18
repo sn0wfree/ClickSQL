@@ -191,7 +191,7 @@ class _Factors(deque):
         yield res
 
 
-class __FatctorTable__(FactorCheckHelper):
+class __FactorTable__(FactorCheckHelper):
     __Name__ = "基础因子库单因子表"
 
     def __init__(self, *args, **kwargs):

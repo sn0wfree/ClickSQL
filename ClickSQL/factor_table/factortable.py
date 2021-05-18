@@ -1,12 +1,12 @@
 # coding=utf-8
 
-from ClickSQL.factor_table import __FatctorTable__
+from ClickSQL.factor_table import __FactorTable__
 
 
-class FatctorTable(__FatctorTable__):
+class FactorTable(__FactorTable__):
     pass
 
 
 if __name__ == '__main__':
-    FatctorTable()
+    FactorTable()
     pass
