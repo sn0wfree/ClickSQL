@@ -5,7 +5,7 @@
 Package information:
 
  
-ClickSQL is a smart client for ClickHouse database, which may help users to use ClickHouse more easier and pythonic. 
+ClickSQL is a python client for ClickHouse database, which may help users to use ClickHouse more easier and pythonic. 
 More information for ClickHouse can be found at [here](http://clickhouse.tech)
 
 
