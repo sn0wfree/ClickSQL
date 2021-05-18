@@ -248,7 +248,7 @@ class __FatctorTable__(FactorCheckHelper):
     # def getDB(self, db):
     #     self.db = db
 
-    def add_factor(self, db_table, factor_names: (list, tuple, str), cik_dt=None, cik_iid=None,
+    def add_factor(self, db_table: str, factor_names: (list, tuple, str), cik_dt=None, cik_iid=None,
                    as_alias: (list, tuple, str) = None):
         conds = '1'  # not allow to set conds
         cik_dt, cik_iid = self.check_cik_dt(cik_dt=cik_dt, default_cik_dt=self._cik.dts), self.check_cik_iid(

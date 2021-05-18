@@ -83,15 +83,19 @@ def _cache(func, arg, kwargs, granularity='H', enable_cache: bool = False, explo
     :param exploit_func:   cache file name whether include func name
     :return:
     """
-    file_path, name = prepare_args(func, arg, kwargs, granularity=granularity, exploit_func_name=exploit_func,
-                                   enable_cache=enable_cache)
-    fg = os.path.join(file_path, name)
-    if os.path.exists(fg) and enable_cache:
-        return read(fg)
+
+    if enable_cache:
+        file_path, name = prepare_args(func, arg, kwargs, granularity=granularity, exploit_func_name=exploit_func,
+                                       enable_cache=enable_cache)
+        fg = os.path.join(file_path, name)
+        if os.path.exists(fg):
+            return read(fg)
+        else:
+            res = func(*arg, **kwargs)
+            write(fg, res)
+            return res
     else:
         res = func(*arg, **kwargs)
-        if enable_cache:
-            write(fg, res)
         return res
 
 

@@ -1,16 +1,15 @@
 # coding=utf-8
+import asyncio
 import gzip
+import json
 import warnings
 from collections import namedtuple
+from functools import partial, partialmethod
 from urllib import parse
 
-import asyncio
-import json
 import numpy as np
-import os
 import pandas as pd
 import requests
-from functools import partial, partialmethod
 
 from ClickSQL.conf import Config
 from ClickSQL.errors import ParameterKeyError, ParameterTypeError, DatabaseTypeError, DatabaseError, \
@@ -26,15 +25,16 @@ clickhouse-server
 if Config.get('ENGAGE_ASYNC', default=False):
     try:
         import nest_asyncio
+
         nest_asyncio.apply()  # allow run at jupyter and asyncio env
-        engage_async = True
+        ENGAGE_ASYNC = True
         from aiohttp import ClientSession
     except Exception as e:
         warnings.warn('Cannot run at jupyter or asyncio env! will use normal version instead!')
-        engage_async = False
+        ENGAGE_ASYNC = False
         from requests import Session as ClientSession
 else:
-    engage_async = False
+    ENGAGE_ASYNC = False
     from requests import Session as ClientSession
 
 node_parameters = ('host', 'port', 'user', 'password', 'database')
@@ -50,11 +50,6 @@ DEFAULT_CONNECT_SETTINGS = {'enable_http_compression': 1, 'send_progress_in_http
                             'log_queries': 1, 'connect_timeout': 10, 'receive_timeout': 300,
                             'send_timeout': 300, 'output_format_json_quote_64bit_integers': 0,
                             'wait_end_of_query': 0}
-
-
-# def SmartBytes(result: bytes, status_code: int):
-#     result_cls = type('SmartBytes', (bytes,), {'status_code': property(lambda x: status_code)})
-#     return result_cls(result)
 
 
 # TODO change to queue mode change remove aiohttp depends
@@ -366,7 +361,7 @@ class ClickHouseBaseNode(ClickHouseHelper):
             raise ValueError(f'sql must be str or list or tuple,but get {type(sql)}')
         return result
 
-    def get_describe_table(self, db, table, filter_type=None):
+    def get_describe_table(self, db, table, filter_type: (list, tuple, None) = None):
         """
 
         :param db:
@@ -409,7 +404,7 @@ class ClickHouseBaseNode(ClickHouseHelper):
         self.__execute__(query_with_format, transfer_sql_format=False, loop=None, to_df=False, raise_error=True)
 
     def __execute__(self, sql: (str, list, tuple), convert_to: str = 'dataframe', transfer_sql_format: bool = True,
-                    loop=None, to_df: bool = True, raise_error=True):
+                    loop=None, to_df: bool = True, raise_error=True, async_mode=True):
         """
         the core execute function to run the whole requests and SQL or a list of SQL.
         :param sql: String or list or tuple
@@ -419,7 +414,7 @@ class ClickHouseBaseNode(ClickHouseHelper):
         :param to_df:
         :return:
         """
-        if engage_async:
+        if async_mode and ENGAGE_ASYNC:
             sem = asyncio.Semaphore(SEMAPHORE)  # limit async num
             resp_list = self._compression_switched_request_async(sql, convert_to=convert_to,
                                                                  transfer_sql_format=transfer_sql_format, sem=sem,
@@ -435,10 +430,11 @@ class ClickHouseBaseNode(ClickHouseHelper):
         return result
 
     def execute(self, *sql, convert_to: str = 'dataframe', loop=None, output_df: bool = True,
-                enable_cache: bool = False, exploit_func: bool = True, raise_error: bool = True):
+                enable_cache: bool = False, exploit_func: bool = True, raise_error: bool = True, async_mode=True):
         """
         execute sql or multi sql
 
+        :param async_mode:
         :param raise_error:
         :param exploit_func:
         :param enable_cache:
@@ -451,7 +447,7 @@ class ClickHouseBaseNode(ClickHouseHelper):
 
         func = file_cache(enable_cache=enable_cache, exploit_func=exploit_func)(self.__execute__)
         result = func(sql, convert_to=convert_to, transfer_sql_format=True, loop=loop,
-                      to_df=True * output_df, raise_error=raise_error)
+                      to_df=True * output_df, raise_error=raise_error, async_mode=async_mode)
         return result[0] if len(sql) == 1 else result
 
     def __call__(self, *args, **kwargs):
@@ -463,12 +459,13 @@ class ClickHouseBaseNode(ClickHouseHelper):
         """
         return self.query(*args, **kwargs)
 
-    def query(self, *sql: str, loop=None, output_df: bool = True, raise_error=True):
+    def query(self, *sql: str, loop=None, output_df: bool = True, raise_error=True, async_mode=True):
 
         """
         add enable_cache and exploit_func
 
         ## TODO require to upgrade
+        :param async_mode:
         :param raise_error:
         :param output_df:
         :param loop:
@@ -477,7 +474,7 @@ class ClickHouseBaseNode(ClickHouseHelper):
         """
 
         result = self.execute(*sql, convert_to='dataframe', loop=loop, output_df=output_df, enable_cache=False,
-                              exploit_func=False, raise_error=raise_error)
+                              exploit_func=False, raise_error=raise_error, async_mode=async_mode)
         return result
 
 
