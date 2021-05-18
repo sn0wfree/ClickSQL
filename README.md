@@ -1,7 +1,7 @@
 # ClickSQL: ClickHouse client for Humans 
  
 [![CodeQL](https://github.com/sn0wfree/ClickSQL/actions/workflows/codeql-analysis.yml/badge.svg?branch=master)](https://github.com/sn0wfree/ClickSQL/actions/workflows/codeql-analysis.yml)
- 
+ [![Python package](https://github.com/sn0wfree/ClickSQL/actions/workflows/python-package.yml/badge.svg?branch=master)](https://github.com/sn0wfree/ClickSQL/actions/workflows/python-package.yml)
 --------------
 Package information:
 
