@@ -6,7 +6,8 @@ import pandas as pd
 
 CIK = namedtuple('CoreIndexKeys', ('dts', 'iid'))
 CIKDATA = namedtuple('CoreIndexKeys', ('dts', 'iid'))
-FactorInfo = namedtuple('FactorInfo', ('db_table', 'dts', 'iid', 'origin_factor_names', 'alias', 'sql', 'conditions'))
+FactorInfo = namedtuple('FactorInfo',
+                        ('db_table', 'dts', 'iid', 'origin_factor_names', 'alias', 'sql', 'via', 'conditions'))
 
 
 def SmartDataFrame(df: pd.DataFrame, db_table: str, dts: str, iid: str, origin_factor_names: str, alias: str, sql: str,
@@ -76,11 +77,15 @@ class FactorCheckHelper(object):
 
 class _Factors(deque):
 
-    @staticmethod
-    def _get_factor_without_check(db_table, factor_names: (list, tuple, str), cik_dt=None, cik_iid=None,
-                                  conds: str = '1', as_alias: (list, tuple, str) = None):
+    # @staticmethod
+    # def _get_factor_without_check(db_table, factor_names: (list, tuple, str), cik_dt=None, cik_iid=None,
+    #                               conds: str = '1', as_alias: (list, tuple, str) = None):
+
+    def add_factor_via_db_table(self, db_table: str, factor_names: (list, tuple, str), cik_dt=None, cik_iid=None,
+                                as_alias: (list, tuple, str) = None, conds='1'):
         """
 
+        :param as_alias:
         :param db_table:
         :param factor_names:
         :param cik_dt:
@@ -100,8 +105,34 @@ class _Factors(deque):
 
         sql = f'select {cols_str}, {cik_dt_str}, {cik_iid_str}  from {db_table} where {conditions}'
 
-        return FactorInfo(db_table, cik_dt, cik_iid, ','.join(map(str, factor_names)), ','.join(map(str, alias)),
-                          sql, conds)  #
+        res = FactorInfo(db_table, cik_dt, cik_iid, ','.join(map(str, factor_names)), ','.join(map(str, alias)),
+                         sql, 'db_table', conds)  #
+        self.append(res)
+
+    def add_factor_via_sql(self, sql_ori, factor_names: (list, tuple, str), cik_dt=None, cik_iid=None,
+                           as_alias: (list, tuple, str) = None, conds='1'):
+        factor_names = FactorCheckHelper.check_factor_names(factor_names)
+        alias = FactorCheckHelper.check_alias(factor_names, as_alias=as_alias)
+        # rename variables
+        f_names_list = [f if (a is None) or (f == a) else f"{f} as {a}" for f, a in zip(factor_names, alias)]
+        cols_str = ','.join(f_names_list)
+        conditions = '1' if conds == '1' else conds.replace('&', 'and').replace('|', 'or').replace('@', '')
+        cik_dt_str = f"{cik_dt} as cik_dt" if cik_dt != 'cik_dt' else cik_dt
+        cik_iid_str = f"{cik_iid} as cik_iid" if cik_iid != 'cik_iid' else cik_iid
+
+        sql = f'select {cols_str}, {cik_dt_str}, {cik_iid_str}  from ({sql_ori}) where {conditions}'
+
+        res = FactorInfo(sql_ori, cik_dt, cik_iid, ','.join(map(str, factor_names)), ','.join(map(str, alias)),
+                         sql, 'sql', conds)  #
+        self.append(res)
+
+    def add_factor_via_df(self):
+        # todo add factor via dataframe
+        pass
+
+    def add_factor_via_ft(self):
+        # todo add factor via factortable
+        pass
 
     def show_factors(self, reduced=False, to_df=True):
         if reduced:
@@ -206,7 +237,7 @@ class __FactorTable__(FactorCheckHelper):
         self.__auto_check_cik__()
         self._factors = _Factors()
 
-        self._strict_cik = True if 'strict_cik' not in kwargs.keys() else kwargs['strict_cik']
+        self._strict_cik = False if 'strict_cik' not in kwargs.keys() else kwargs['strict_cik']
         # self.append = self.add_factor
 
         self._cik_dts = None
@@ -253,8 +284,8 @@ class __FactorTable__(FactorCheckHelper):
         conds = '1'  # not allow to set conds
         cik_dt, cik_iid = self.check_cik_dt(cik_dt=cik_dt, default_cik_dt=self._cik.dts), self.check_cik_iid(
             cik_iid=cik_iid, default_cik_iid=self._cik.iid)
-        res = self._factors._get_factor_without_check(db_table, factor_names, cik_dt=cik_dt, cik_iid=cik_iid,
-                                                      conds=conds, as_alias=as_alias)
+        res = self._factors.add_factor_via_db_table(db_table, factor_names, cik_dt=cik_dt, cik_iid=cik_iid,
+                                                    conds=conds, as_alias=as_alias)
         self._factors.append(res)
 
     def show_factors(self, reduced=False, to_df=True):
