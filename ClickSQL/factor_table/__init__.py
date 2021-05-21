@@ -11,6 +11,7 @@ FactorInfo = namedtuple('FactorInfo',
 
 
 def SmartDataFrame(df: pd.DataFrame, db_table: str, dts: str, iid: str, origin_factor_names: str, alias: str, sql: str,
+                   via: str,
                    conditions: str):
     sproperty = {'_db_table': property(lambda x: db_table),
                  '_cik_dt': property(lambda x: dts),
@@ -19,6 +20,7 @@ def SmartDataFrame(df: pd.DataFrame, db_table: str, dts: str, iid: str, origin_f
                  '_alias': property(lambda x: alias),
                  '_sql': property(lambda x: sql),
                  '_conditions': property(lambda x: conditions),
+                 '_via': property(lambda x: via),
 
                  }
 
@@ -81,18 +83,18 @@ class _Factors(deque):
     # def _get_factor_without_check(db_table, factor_names: (list, tuple, str), cik_dt=None, cik_iid=None,
     #                               conds: str = '1', as_alias: (list, tuple, str) = None):
 
-    def add_factor_via_db_table(self, db_table: str, factor_names: (list, tuple, str), cik_dt=None, cik_iid=None,
-                                as_alias: (list, tuple, str) = None, conds='1'):
+    def _add_factor_via_obj(self, db_table: str, factor_names: (list, tuple, str), via: str, cik_dt=None,
+                            cik_iid=None, as_alias: (list, tuple, str) = None, conds='1'):
         """
 
-        :param as_alias:
-        :param db_table:
-        :param factor_names:
-        :param cik_dt:
-        :param cik_iid:
-        :param conds:  conds = @test1>1 | @test2<1
-        :return:
-        """
+       :param as_alias:
+       :param db_table:
+       :param factor_names:
+       :param cik_dt:
+       :param cik_iid:
+       :param conds:  conds = @test1>1 | @test2<1
+       :return:
+       """
         factor_names = FactorCheckHelper.check_factor_names(factor_names)
         alias = FactorCheckHelper.check_alias(factor_names, as_alias=as_alias)
         # rename variables
@@ -106,39 +108,48 @@ class _Factors(deque):
         sql = f'select {cols_str}, {cik_dt_str}, {cik_iid_str}  from {db_table} where {conditions}'
 
         res = FactorInfo(db_table, cik_dt, cik_iid, ','.join(map(str, factor_names)), ','.join(map(str, alias)),
-                         sql, 'db_table', conds)  #
-        self.append(res)
+                         sql, via, conds)  #
+        return res
+        # self.append(res)
+
+    def add_factor_via_db_table(self, db_table: str, factor_names: (list, tuple, str), cik_dt=None, cik_iid=None,
+                                as_alias: (list, tuple, str) = None, conds='1'):
+        return self._add_factor_via_obj(db_table, factor_names, 'db_table', cik_dt=cik_dt,
+                                        cik_iid=cik_iid, as_alias=as_alias, conds=conds)
 
     def add_factor_via_sql(self, sql_ori, factor_names: (list, tuple, str), cik_dt=None, cik_iid=None,
                            as_alias: (list, tuple, str) = None, conds='1'):
-        factor_names = FactorCheckHelper.check_factor_names(factor_names)
-        alias = FactorCheckHelper.check_alias(factor_names, as_alias=as_alias)
-        # rename variables
-        f_names_list = [f if (a is None) or (f == a) else f"{f} as {a}" for f, a in zip(factor_names, alias)]
-        cols_str = ','.join(f_names_list)
-        conditions = '1' if conds == '1' else conds.replace('&', 'and').replace('|', 'or').replace('@', '')
-        cik_dt_str = f"{cik_dt} as cik_dt" if cik_dt != 'cik_dt' else cik_dt
-        cik_iid_str = f"{cik_iid} as cik_iid" if cik_iid != 'cik_iid' else cik_iid
-
-        sql = f'select {cols_str}, {cik_dt_str}, {cik_iid_str}  from ({sql_ori}) where {conditions}'
-
-        res = FactorInfo(sql_ori, cik_dt, cik_iid, ','.join(map(str, factor_names)), ','.join(map(str, alias)),
-                         sql, 'sql', conds)  #
-        self.append(res)
+        return self._add_factor_via_obj(sql_ori, factor_names, 'sql', cik_dt=cik_dt,
+                                        cik_iid=cik_iid, as_alias=as_alias, conds=conds)
+        # factor_names = FactorCheckHelper.check_factor_names(factor_names)
+        # alias = FactorCheckHelper.check_alias(factor_names, as_alias=as_alias)
+        # # rename variables
+        # f_names_list = [f if (a is None) or (f == a) else f"{f} as {a}" for f, a in zip(factor_names, alias)]
+        # cols_str = ','.join(f_names_list)
+        # conditions = '1' if conds == '1' else conds.replace('&', 'and').replace('|', 'or').replace('@', '')
+        # cik_dt_str = f"{cik_dt} as cik_dt" if cik_dt != 'cik_dt' else cik_dt
+        # cik_iid_str = f"{cik_iid} as cik_iid" if cik_iid != 'cik_iid' else cik_iid
+        #
+        # sql = f'select {cols_str}, {cik_dt_str}, {cik_iid_str}  from ({sql_ori}) where {conditions}'
+        #
+        # res = FactorInfo(sql_ori, cik_dt, cik_iid, ','.join(map(str, factor_names)), ','.join(map(str, alias)),
+        #                  sql, 'sql', conds)  #
+        # return res
 
     def add_factor_via_df(self):
         # todo add factor via dataframe
+        raise NotImplementedError('not supported')
         pass
 
     def add_factor_via_ft(self):
         # todo add factor via factortable
-        pass
+        raise NotImplementedError('not supported')
 
     def show_factors(self, reduced=False, to_df=True):
         if reduced:
-            # ('db_table', 'dts', 'iid', 'origin_factor_names', 'alias', 'sql', 'conditions')
+            # ('db_table', 'dts', 'iid', 'origin_factor_names', 'alias', 'sql','via', 'conditions')
             # ['db_table', 'dts', 'iid', 'conditions']
-            cols = list(FactorInfo._fields[:3]) + [FactorInfo._fields[-1]]
+            cols = list(FactorInfo._fields[:3]) + list(FactorInfo._fields[-2:])
 
             f = pd.DataFrame(list(self), columns=FactorInfo._fields)
             factor_name_col = FactorInfo._fields[3]
@@ -148,7 +159,7 @@ class _Factors(deque):
             # can_merged_index = can_merged_index[can_merged_index['sql']]
             # can_merged_index = fgroupby.count().index
             factors = []
-            for (db_table, dts, iid, conditions), df in f.groupby(cols):
+            for (db_table, dts, iid, via, conditions), df in f.groupby(cols):
                 # masks = (f['db_table'] == db_table) & (f['dts'] == dts) & (f['iid'] == iid) & (
                 #         f['conditions'] == conditions)
                 cc = df[[factor_name_col, alias_col]].apply(lambda x: ','.join(x))
@@ -160,10 +171,9 @@ class _Factors(deque):
                 # cik_dt, cik_iid = self.check_cik_dt(cik_dt=dts, default_cik_dt=self._cik.dts), self.check_cik_iid(
                 #     cik_iid=iid, default_cik_iid=self._cik.iid)
                 # add_factor process have checked
-                res = self._get_factor_without_check(db_table, origin_factor_names_new, cik_dt=dts, cik_iid=iid,
-                                                     conds=conditions, as_alias=alias_new)
+                res = self._add_factor_via_obj(db_table, origin_factor_names_new, via, cik_dt=dts, cik_iid=iid,
+                                               conds=conditions, as_alias=alias_new)
                 factors.append(res)
-
         else:
             factors = self
         if to_df:
@@ -171,40 +181,57 @@ class _Factors(deque):
         else:
             return factors
 
+    def _generate_fetch_sql_iter(self, filter_cond_dts, filter_cond__ids, reduced=True, add_limit=False):
+        factors = self.show_factors(reduced=reduced, to_df=False)
+        # sql_list = []
+        if add_limit:
+            limit_str = 'limit 100'
+        else:
+            limit_str = ''
+        ## todo 可能存在性能点
+        for db_table, dts, iid, origin_factor_names, alias, sql, via, conditions in factors:
+            sql2 = f"select * from ({sql}) where {filter_cond_dts} and {filter_cond__ids} {limit_str} "
+            yield sql2
+
     def fetch_iter(self, query, filter_cond_dts, filter_cond__ids, reduced=True, add_limit=False):
         if not isinstance(query, Callable):
             raise ValueError('query must database connector with __call__')
-
-        factors = self.show_factors(reduced=reduced, to_df=False)
-
-        for db_table, dts, iid, origin_factor_names, alias, sql, conditions in factors:
-            ## todo 可能存在性能点
-            if add_limit:
-                sql2 = f"select * from ({sql}) where {filter_cond_dts} and {filter_cond__ids} limit 100"
-            else:
-                sql2 = f"select * from ({sql}) where {filter_cond_dts} and {filter_cond__ids}"
-
+        sql_list_iter = self._generate_fetch_sql_iter(filter_cond_dts, filter_cond__ids, reduced=reduced,
+                                                      add_limit=add_limit)
+        # factors = self.show_factors(reduced=reduced, to_df=False)
+        # if add_limit:
+        #     limit_str = 'limit 100'
+        # else:
+        #     limit_str = ''
+        # for db_table, dts, iid, origin_factor_names, alias, sql, via, conditions in factors:
+        #     ## todo 可能存在性能点
+        #     # if add_limit:
+        #     sql2 = f"select * from ({sql}) where {filter_cond_dts} and {filter_cond__ids} {limit_str}"
+        # else:
+        #     sql2 = f"select * from ({sql}) where {filter_cond_dts} and {filter_cond__ids}"
+        for sql2 in sql_list_iter:
             df = query(sql2)
-            res = SmartDataFrame(df, db_table, dts, iid, origin_factor_names, alias, sql, conditions).set_index(
-                ['cik_dt', 'cik_iid'])
+            ## remove smartdataframe
+            res = pd.DataFrame(df).set_index(['cik_dt', 'cik_iid'])
 
             # ['db_table', 'dts', 'iid', 'origin_factor_names', 'alias', 'sql', 'conditions']
             yield res
 
-    def fetch_sql(self, query, filter_cond_dts, filter_cond__ids, reduced=True, add_limit=False):
+    def fetch_all(self, query, filter_cond_dts, filter_cond__ids, reduced=True, add_limit=False):
         if not isinstance(query, Callable):
             raise ValueError('query must database connector with __call__')
-        factors = self.show_factors(reduced=reduced, to_df=False)
-        sql_list = []
-        if add_limit:
-            ## todo 可能存在性能点
-            for db_table, dts, iid, origin_factor_names, alias, sql, conditions in factors:
-                sql2 = f"select * from ({sql}) where {filter_cond_dts} and {filter_cond__ids} limit 100"
-                sql_list.append(sql2)
-        else:
-            for db_table, dts, iid, origin_factor_names, alias, sql, conditions in factors:
-                sql2 = f"select * from ({sql}) where {filter_cond_dts} and {filter_cond__ids}"
-                sql_list.append(sql2)
+        sql_list_iter = self._generate_fetch_sql_iter(filter_cond_dts, filter_cond__ids, reduced=reduced,
+                                                      add_limit=add_limit)
+        # factors = self.show_factors(reduced=reduced, to_df=False)
+        # sql_list = []
+        # if add_limit:
+        #     limit_str = 'limit 100'
+        # else:
+        #     limit_str = ''
+        # ## todo 可能存在性能点
+        # for db_table, dts, iid, origin_factor_names, alias, sql, conditions in factors:
+        #     sql2 = f"select * from ({sql}) where {filter_cond_dts} and {filter_cond__ids} {limit_str} "
+        #     sql_list.append(sql2)
 
         from functools import reduce
 
@@ -213,10 +240,9 @@ class _Factors(deque):
             sql = f"select * from ({sql1}) all full join ({sql2}) using (cik_dt,cik_iid)  {settings}"
             return sql
 
-        s = reduce(lambda x, y: join(x, y), sql_list)
+        s = reduce(lambda x, y: join(x, y), sql_list_iter)
         df = query(s)
-        res = SmartDataFrame(df, db_table, dts, iid, origin_factor_names, alias, sql, conditions).set_index(
-            ['cik_dt', 'cik_iid'])
+        res = pd.DataFrame(df).set_index(['cik_dt', 'cik_iid'])
 
         # ['db_table', 'dts', 'iid', 'origin_factor_names', 'alias', 'sql', 'conditions']
         yield res

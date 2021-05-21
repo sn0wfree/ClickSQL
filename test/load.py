@@ -1,10 +1,10 @@
 # coding=utf-8
 
-from ClickSQL.factor_table.factortable import FatctorTable
+from ClickSQL.factor_table.factortable import FactorTable
 
 from test.conn import conn
 
-Node = FatctorTable(conn, cik_dt='datetime', cik_iid='code', strict_cik=False)
+Node = FactorTable(conn, cik_dt='datetime', cik_iid='code', strict_cik=False)
 
 if __name__ == '__main__':
     Node.add_factor('EDGAR_LOG.edgar_log', factor_names=['size'], cik_dt='date', cik_iid='ip')

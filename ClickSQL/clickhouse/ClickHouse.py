@@ -55,7 +55,7 @@ DEFAULT_CONNECT_SETTINGS = {'enable_http_compression': 1, 'send_progress_in_http
 # TODO change to queue mode change remove aiohttp depends
 class ClickHouseHelper(object):
     @staticmethod
-    def _check_df_and_dump(df: pd.DataFrame, describe_table: pd.DataFrame):
+    def _check_df_and_dump(df: pd.DataFrame, describe_table: pd.DataFrame, auto_convert=True):
         """
 
         :param df:
@@ -65,13 +65,17 @@ class ClickHouseHelper(object):
         describe_table = describe_table[~describe_table['default_type'].isin(['MATERIALIZED', 'ALIAS'])]
         non_nullable_columns = list(describe_table[~describe_table['type'].str.startswith('Nullable')]['name'])
         integer_columns = list(describe_table[describe_table['type'].str.contains('Int', regex=False)]['name'])
+        print(pd.get_versions())
+        if auto_convert:
+            df = df.convert_dtypes()
         missing_in_df = {i: np.where(df[i].isnull(), 1, 0).sum() for i in non_nullable_columns}
 
-        df_columns = list(df.columns)
-        each_row = df.to_dict(orient='records')
-        for i in missing_in_df:
-            if missing_in_df[i] > 0:
+        for i, value in missing_in_df.items():
+            if value > 0:
                 raise ValueError('"{0}" is not a nullable column, missing values are not allowed.'.format(i))
+
+        df_columns = df.columns.tolist()
+        each_row = df.to_dict(orient='records')
 
         for row in each_row:
             for col in df_columns:

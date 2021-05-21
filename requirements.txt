@@ -1,5 +1,5 @@
 scipy
-pandas
+pandas>=1.0.0
 numpy
 requests>=2.20.0
 aiohttp>=3.6.2
