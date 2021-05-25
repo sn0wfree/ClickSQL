@@ -13,7 +13,7 @@ import requests
 
 from ClickSQL.conf import Config
 from ClickSQL.errors import ParameterKeyError, ParameterTypeError, DatabaseTypeError, DatabaseError, \
-    HeartbeatCheckFailure, ClickHouseTableNotExistsError
+    HeartbeatCheckFailure, ClickHouseTableNotExistsError,ServerError
 from ClickSQL.utils import cached_property, file_cache, parse_rfc1738_args
 
 """
@@ -261,7 +261,7 @@ class ClickHouseBaseNode(ClickHouseHelper):
         # reason = resp.reason
         if resp.status_code != 200:
             if raise_error and GLOBAL_RAISE_ERROR:
-                raise DatabaseError(result)
+                raise ServerError(result)
             else:
                 # result = SmartBytes(result, resp.status_code)
                 warnings.warn(str(result))
