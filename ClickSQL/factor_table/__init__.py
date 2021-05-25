@@ -10,27 +10,27 @@ FactorInfo = namedtuple('FactorInfo',
                         ('db_table', 'dts', 'iid', 'origin_factor_names', 'alias', 'sql', 'via', 'conditions'))
 
 
-def SmartDataFrame(df: pd.DataFrame, db_table: str, dts: str, iid: str, origin_factor_names: str, alias: str, sql: str,
-                   via: str,
-                   conditions: str):
-    sproperty = {'_db_table': property(lambda x: db_table),
-                 '_cik_dt': property(lambda x: dts),
-                 '_cik_iid': property(lambda x: iid),
-                 '_origin_factor_names': property(lambda x: origin_factor_names),
-                 '_alias': property(lambda x: alias),
-                 '_sql': property(lambda x: sql),
-                 '_conditions': property(lambda x: conditions),
-                 '_via': property(lambda x: via),
-
-                 }
-
-    result_cls = type('SmartDataFrame', (pd.DataFrame,), sproperty)
-    return result_cls(df)
+# def SmartDataFrame(df: pd.DataFrame, db_table: str, dts: str, iid: str, origin_factor_names: str, alias: str, sql: str,
+#                    via: str,
+#                    conditions: str):
+#     sproperty = {'_db_table': property(lambda x: db_table),
+#                  '_cik_dt': property(lambda x: dts),
+#                  '_cik_iid': property(lambda x: iid),
+#                  '_origin_factor_names': property(lambda x: origin_factor_names),
+#                  '_alias': property(lambda x: alias),
+#                  '_sql': property(lambda x: sql),
+#                  '_conditions': property(lambda x: conditions),
+#                  '_via': property(lambda x: via),
+#
+#                  }
+#
+#     result_cls = type('SmartDataFrame', (pd.DataFrame,), sproperty)
+#     return result_cls(df)
 
 
 class FactorCheckHelper(object):
     @staticmethod
-    def check_alias(factor_names: (list,), as_alias: (list, tuple, str) = None):
+    def generate_alias(factor_names: (list,), as_alias: (list, tuple, str) = None):
         if as_alias is None:
             alias = len(factor_names) * [None]
         elif isinstance(as_alias, str):
@@ -45,7 +45,7 @@ class FactorCheckHelper(object):
         return alias
 
     @staticmethod
-    def check_factor_names(factor_names: (list, tuple, str)):
+    def generate_factor_names(factor_names: (list, tuple, str)):
         if isinstance(factor_names, str):
             factor_names = [factor_names]
         elif isinstance(factor_names, (list, tuple)):
@@ -77,14 +77,39 @@ class FactorCheckHelper(object):
         return cik_iid
 
 
+class __MetaFactorTable__(FactorCheckHelper):
+    pass
+
+
 class _Factors(deque):
+    @classmethod
+    def add_factor(cls, db_table: str, factor_names: (list, tuple, str), cik_dt,
+                   cik_iid, cik_dt_format: str = 'datetime', as_alias: (list, tuple, str) = None,
+                   conds='1'):
+        if isinstance(db_table, str):
+            if db_table.lower().startswith('select'):
+                via = 'sql'
+                return cls.add_factor_via_sql(db_table, factor_names, cik_dt=cik_dt, cik_iid=cik_iid,
+                                              as_alias=as_alias, conds=conds, cik_dt_format=cik_dt_format)
+            else:
+                via = 'db_table'
+                return cls.add_factor_via_db_table(db_table, factor_names, cik_dt=cik_dt, cik_iid=cik_iid,
+                                                   as_alias=as_alias, conds=conds, cik_dt_format=cik_dt_format)
+        elif isinstance(db_table, pd.DataFrame):
 
-    # @staticmethod
-    # def _get_factor_without_check(db_table, factor_names: (list, tuple, str), cik_dt=None, cik_iid=None,
-    #                               conds: str = '1', as_alias: (list, tuple, str) = None):
+            cls.add_factor_via_df(db_table, factor_names, cik_dt=cik_dt, cik_iid=cik_iid,
+                                  as_alias=as_alias, conds=conds, cik_dt_format=cik_dt_format)
 
-    def _add_factor_via_obj(self, db_table: str, factor_names: (list, tuple, str), via: str, cik_dt=None,
-                            cik_iid=None, as_alias: (list, tuple, str) = None, conds='1'):
+        elif isinstance(db_table, __MetaFactorTable__):
+            return list(cls.add_factor_via_ft(db_table, factor_names, cik_dt=cik_dt, cik_iid=cik_iid,
+                                              as_alias=as_alias, conds=conds, cik_dt_format=cik_dt_format))
+        else:
+            raise NotImplementedError('not supported')
+
+    @staticmethod
+    def _add_factor_via_obj(db_table: str, factor_names: (list, tuple, str), via: str, cik_dt,
+                            cik_iid, cik_dt_format: str = 'datetime', as_alias: (list, tuple, str) = None,
+                            conds='1', check=False):
         """
 
        :param as_alias:
@@ -95,57 +120,79 @@ class _Factors(deque):
        :param conds:  conds = @test1>1 | @test2<1
        :return:
        """
-        factor_names = FactorCheckHelper.check_factor_names(factor_names)
-        alias = FactorCheckHelper.check_alias(factor_names, as_alias=as_alias)
+        factor_names = FactorCheckHelper.generate_factor_names(factor_names)
+        alias = FactorCheckHelper.generate_alias(factor_names, as_alias=as_alias)
         # rename variables
         f_names_list = [f if (a is None) or (f == a) else f"{f} as {a}" for f, a in zip(factor_names, alias)]
         cols_str = ','.join(f_names_list)
 
+        # change dt dtype for suitable dtype
         conditions = '1' if conds == '1' else conds.replace('&', 'and').replace('|', 'or').replace('@', '')
-        cik_dt_str = f"{cik_dt} as cik_dt" if cik_dt != 'cik_dt' else cik_dt
-        cik_iid_str = f"{cik_iid} as cik_iid" if cik_iid != 'cik_iid' else cik_iid
 
-        sql = f'select {cols_str}, {cik_dt_str}, {cik_iid_str}  from {db_table} where {conditions}'
+        # convert cik_dt
+        if cik_dt == 'cik_dt':
+            cik_dt_str = cik_dt
+        else:
+            if cik_dt_format == 'str':
+                cik_dt_str = f"parseDateTimeBestEffort({cik_dt}) as cik_dt"
+            elif cik_dt_format == 'datetime':
+                cik_dt_str = f"{cik_dt} as cik_dt"
+            elif cik_dt_format == 'int':
+                cik_dt_str = f"parseDateTimeBestEffort(toString({cik_dt})) as cik_dt"
+            else:
+                cik_dt_str = f"parseDateTimeBestEffort(toString({cik_dt})) as cik_dt"
+
+        # convert cik_iid
+        cik_iid_str = f"{cik_iid} as cik_iid"
+        if via == 'sql':
+            sql = f'select {cols_str}, {cik_dt_str}, {cik_iid_str}  from ({db_table}) where {conditions}'
+        else:
+            sql = f'select {cols_str}, {cik_dt_str}, {cik_iid_str}  from {db_table} where {conditions}'
 
         res = FactorInfo(db_table, cik_dt, cik_iid, ','.join(map(str, factor_names)), ','.join(map(str, alias)),
                          sql, via, conds)  #
         return res
         # self.append(res)
 
-    def add_factor_via_db_table(self, db_table: str, factor_names: (list, tuple, str), cik_dt=None, cik_iid=None,
-                                as_alias: (list, tuple, str) = None, conds='1'):
-        return self._add_factor_via_obj(db_table, factor_names, 'db_table', cik_dt=cik_dt,
-                                        cik_iid=cik_iid, as_alias=as_alias, conds=conds)
+    @classmethod
+    def add_factor_via_db_table(cls, db_table: str, factor_names: (list, tuple, str), cik_dt=None, cik_iid=None,
+                                as_alias: (list, tuple, str) = None, conds='1', cik_dt_format: str = 'datetime', ):
+        return cls._add_factor_via_obj(db_table, factor_names, 'db_table', cik_dt=cik_dt, cik_dt_format=cik_dt_format,
+                                       cik_iid=cik_iid, as_alias=as_alias, conds=conds)
 
-    def add_factor_via_sql(self, sql_ori, factor_names: (list, tuple, str), cik_dt=None, cik_iid=None,
+    @classmethod
+    def add_factor_via_sql(cls, sql_ori, factor_names: (list, tuple, str), cik_dt=None, cik_iid=None,
+                           cik_dt_format: str = 'datetime',
                            as_alias: (list, tuple, str) = None, conds='1'):
-        return self._add_factor_via_obj(sql_ori, factor_names, 'sql', cik_dt=cik_dt,
-                                        cik_iid=cik_iid, as_alias=as_alias, conds=conds)
-        # factor_names = FactorCheckHelper.check_factor_names(factor_names)
-        # alias = FactorCheckHelper.check_alias(factor_names, as_alias=as_alias)
-        # # rename variables
-        # f_names_list = [f if (a is None) or (f == a) else f"{f} as {a}" for f, a in zip(factor_names, alias)]
-        # cols_str = ','.join(f_names_list)
-        # conditions = '1' if conds == '1' else conds.replace('&', 'and').replace('|', 'or').replace('@', '')
-        # cik_dt_str = f"{cik_dt} as cik_dt" if cik_dt != 'cik_dt' else cik_dt
-        # cik_iid_str = f"{cik_iid} as cik_iid" if cik_iid != 'cik_iid' else cik_iid
-        #
-        # sql = f'select {cols_str}, {cik_dt_str}, {cik_iid_str}  from ({sql_ori}) where {conditions}'
-        #
-        # res = FactorInfo(sql_ori, cik_dt, cik_iid, ','.join(map(str, factor_names)), ','.join(map(str, alias)),
-        #                  sql, 'sql', conds)  #
-        # return res
+        return cls._add_factor_via_obj(sql_ori, factor_names, 'sql', cik_dt=cik_dt, cik_dt_format=cik_dt_format,
+                                       cik_iid=cik_iid, as_alias=as_alias, conds=conds)
 
-    def add_factor_via_df(self):
+    @classmethod
+    def add_factor_via_df(cls, *args, **kwargs):
         # todo add factor via dataframe
         raise NotImplementedError('not supported')
         pass
 
-    def add_factor_via_ft(self):
+    @classmethod
+    def add_factor_via_ft(cls, factor_table: __MetaFactorTable__, factor_names: (list, tuple), cik_dt=None,
+                          cik_iid=None,
+                          as_alias: (list, tuple, str) = None, conds='1', cik_dt_format: str = 'datetime', ):
         # todo add factor via factortable
-        raise NotImplementedError('not supported')
+        if isinstance(factor_table, __MetaFactorTable__):
+            for f in factor_table._factors.show_factors(reduced=True, to_df=False):
+                origin_factor_names = f.origin_factor_names.split(',')
+                alias_factor_names = f.alias.split(',')
+                for o_f, alias_f in zip(origin_factor_names, alias_factor_names):
+                    if o_f in factor_names or alias_f in factor_names:
+                        yield f
+                        break
+
+            # raise NotImplementedError('not supported')
+        else:
+            raise TypeError('factor_table must be FactorTable or its subclass!')
 
     def show_factors(self, reduced=False, to_df=True):
+        # todo unstack factor name to check whether factor exists duplicates!!
         if reduced:
             # ('db_table', 'dts', 'iid', 'origin_factor_names', 'alias', 'sql','via', 'conditions')
             # ['db_table', 'dts', 'iid', 'conditions']
@@ -181,7 +228,7 @@ class _Factors(deque):
         else:
             return factors
 
-    def _generate_fetch_sql_iter(self, filter_cond_dts, filter_cond__ids, reduced=True, add_limit=False):
+    def _generate_fetch_sql_iter(self, filter_cond_dts, filter_cond_ids, reduced=True, add_limit=False):
         factors = self.show_factors(reduced=reduced, to_df=False)
         # sql_list = []
         if add_limit:
@@ -190,48 +237,34 @@ class _Factors(deque):
             limit_str = ''
         ## todo 可能存在性能点
         for db_table, dts, iid, origin_factor_names, alias, sql, via, conditions in factors:
-            sql2 = f"select * from ({sql}) where {filter_cond_dts} and {filter_cond__ids} {limit_str} "
+            sql2 = f"select * from ({sql}) where {filter_cond_dts} and {filter_cond_ids} {limit_str} "
             yield sql2
 
-    def fetch_iter(self, query, filter_cond_dts, filter_cond__ids, reduced=True, add_limit=False):
+    def fetch_iter(self, query, filter_cond_dts, filter_cond__ids, reduced=True, add_limit=False, to_sql=False):
         if not isinstance(query, Callable):
             raise ValueError('query must database connector with __call__')
         sql_list_iter = self._generate_fetch_sql_iter(filter_cond_dts, filter_cond__ids, reduced=reduced,
                                                       add_limit=add_limit)
-        # factors = self.show_factors(reduced=reduced, to_df=False)
-        # if add_limit:
-        #     limit_str = 'limit 100'
-        # else:
-        #     limit_str = ''
-        # for db_table, dts, iid, origin_factor_names, alias, sql, via, conditions in factors:
-        #     ## todo 可能存在性能点
-        #     # if add_limit:
-        #     sql2 = f"select * from ({sql}) where {filter_cond_dts} and {filter_cond__ids} {limit_str}"
-        # else:
-        #     sql2 = f"select * from ({sql}) where {filter_cond_dts} and {filter_cond__ids}"
-        for sql2 in sql_list_iter:
-            df = query(sql2)
-            ## remove smartdataframe
-            res = pd.DataFrame(df).set_index(['cik_dt', 'cik_iid'])
 
-            # ['db_table', 'dts', 'iid', 'origin_factor_names', 'alias', 'sql', 'conditions']
-            yield res
+        if to_sql:
+            for sql2 in sql_list_iter:
+                yield sql2
+        else:
 
-    def fetch_all(self, query, filter_cond_dts, filter_cond__ids, reduced=True, add_limit=False):
+            for sql2 in sql_list_iter:
+                df = query(sql2)
+                ## remove smartdataframe
+
+                res = pd.DataFrame(df).set_index(['cik_dt', 'cik_iid'])
+
+                # ['db_table', 'dts', 'iid', 'origin_factor_names', 'alias', 'sql', 'conditions']
+                yield res
+
+    def fetch_all(self, query, filter_cond_dts, filter_cond__ids, reduced=True, add_limit=False, to_sql=False):
         if not isinstance(query, Callable):
             raise ValueError('query must database connector with __call__')
         sql_list_iter = self._generate_fetch_sql_iter(filter_cond_dts, filter_cond__ids, reduced=reduced,
                                                       add_limit=add_limit)
-        # factors = self.show_factors(reduced=reduced, to_df=False)
-        # sql_list = []
-        # if add_limit:
-        #     limit_str = 'limit 100'
-        # else:
-        #     limit_str = ''
-        # ## todo 可能存在性能点
-        # for db_table, dts, iid, origin_factor_names, alias, sql, conditions in factors:
-        #     sql2 = f"select * from ({sql}) where {filter_cond_dts} and {filter_cond__ids} {limit_str} "
-        #     sql_list.append(sql2)
 
         from functools import reduce
 
@@ -241,14 +274,17 @@ class _Factors(deque):
             return sql
 
         s = reduce(lambda x, y: join(x, y), sql_list_iter)
-        df = query(s)
-        res = pd.DataFrame(df).set_index(['cik_dt', 'cik_iid'])
+        if to_sql:
+            yield s
+        else:
+            df = query(s)
+            res = pd.DataFrame(df).set_index(['cik_dt', 'cik_iid'])
 
-        # ['db_table', 'dts', 'iid', 'origin_factor_names', 'alias', 'sql', 'conditions']
-        yield res
+            # ['db_table', 'dts', 'iid', 'origin_factor_names', 'alias', 'sql', 'conditions']
+            yield res
 
 
-class __FactorTable__(FactorCheckHelper):
+class __FactorTable__(__MetaFactorTable__):
     __Name__ = "基础因子库单因子表"
 
     def __init__(self, *args, **kwargs):
@@ -260,7 +296,7 @@ class __FactorTable__(FactorCheckHelper):
         self._cik = CIK(cik_dt, cik_iid)
         self._cik_data = None
         self._checked = False
-        self.__auto_check_cik__()
+        self.__auto_check_cik__()  # check default dt and iid whether set up
         self._factors = _Factors()
 
         self._strict_cik = False if 'strict_cik' not in kwargs.keys() else kwargs['strict_cik']
@@ -274,23 +310,6 @@ class __FactorTable__(FactorCheckHelper):
             raise NotImplementedError('cik(dts or iid) is not setup!')
         else:
             self._checked = True
-
-    # def __check_cik__(self, cik_dt=None, cik_iid=None):
-    #     if cik_dt is not None:
-    #         pass
-    #
-    #     elif cik_dt is None:
-    #         cik_dt = self._cik.dts
-    #     else:
-    #         raise NotImplementedError('cik_dt is not setup!')
-    #
-    #     if cik_iid is not None:
-    #         pass
-    #     elif cik_iid is None :
-    #         cik_iid = self._cik.iid
-    #     else:
-    #         raise NotImplementedError('cik_iid is not setup!')
-    #     return cik_dt, cik_iid
 
     def setup_cik(self, cik_dt_col: str, cik_iid_col: str):
         """
@@ -306,20 +325,25 @@ class __FactorTable__(FactorCheckHelper):
     #     self.db = db
 
     def add_factor(self, db_table: str, factor_names: (list, tuple, str), cik_dt=None, cik_iid=None,
+                   cik_dt_format='datetime',
+
                    as_alias: (list, tuple, str) = None):
         conds = '1'  # not allow to set conds
         cik_dt, cik_iid = self.check_cik_dt(cik_dt=cik_dt, default_cik_dt=self._cik.dts), self.check_cik_iid(
             cik_iid=cik_iid, default_cik_iid=self._cik.iid)
-        res = self._factors.add_factor_via_db_table(db_table, factor_names, cik_dt=cik_dt, cik_iid=cik_iid,
-                                                    conds=conds, as_alias=as_alias)
-        self._factors.append(res)
+
+        res = self._factors.add_factor(db_table, factor_names, cik_dt=cik_dt, cik_iid=cik_iid,
+                                       cik_dt_format=cik_dt_format,
+                                       conds=conds, as_alias=as_alias)
+        if isinstance(res, tuple):
+            self._factors.append(res)
+        elif isinstance(res, list):
+            self._factors.extend(res)
+        else:
+            raise ValueError('res is not list or tuple')
 
     def show_factors(self, reduced=False, to_df=True):
         return self._factors.show_factors(reduced=reduced, to_df=to_df)
-
-        # no_duplicates_df = f.eval("+".join(cols))
-        ## todo auto merge same condition,dbtable,dts,iid
-        # return can_merged_index
 
     def __iter__(self):
         return self._factors.fetch_iter(self._node, self.cik_dt, self.cik_iid, reduced=True,
@@ -341,21 +365,25 @@ class __FactorTable__(FactorCheckHelper):
             if self._cik_iids is None:
                 raise KeyError('cik_iids is not setup!')
 
-        return pd.concat(
-            self._factors.fetch_iter(self._node, self.cik_dt, self.cik_iid, reduced=reduced,
-                                     add_limit=add_limit), axis=1)
+        fetched = self._factors.fetch_iter(self._node, self.cik_dt, self.cik_iid, reduced=reduced,
+                                           add_limit=add_limit)
+
+        result = pd.concat(fetched, axis=1)
+        columns = result.columns.tolist()
+
+
+
+        return result
 
     @property
     def cik_dt(self):
         dt_format = "%Y%m%d"
         if self._cik_dts is None:
             return "  1 "
-
         else:
             cik_dts_str = "','".join(map(lambda x: x.strftime(dt_format), pd.to_datetime(self._cik_dts)))
-            return f" cik_dt in ('{cik_dts_str}') "
+            return f" toYYYYMMDD(cik_dt) in ('{cik_dts_str}') "
 
-    @cik_dt.setter
     def set_cik_dt(self, cik_dt: list):
         self._cik_dts = cik_dt
 
@@ -363,26 +391,13 @@ class __FactorTable__(FactorCheckHelper):
     def cik_iid(self):
         if self._cik_iids is None:
             return "  1 "
-
         else:
             cik_iid_str = "','".join(map(lambda x: x, self._cik_iids))
             return f" cik_iid in ('{cik_iid_str}') "
 
-    @cik_iid.setter
     def set_cik_iid(self, cik_iid: list):
         self._cik_iids = cik_iid
         pass
-
-    # def where(self, cik_dt: list = None, cik_iid: list = None, cik_dt_format="%Y%m%d"):
-    #     extra_conds = []
-    #     if cik_dt is None:
-    #         pass
-    #     else:
-    #         cik_dt_ = ','.join(pd.to_datetime(cik_dt).strftime(cik_dt_format))
-    #         cik_dt_cond = f"cik_dt in ({cik_dt_}) "
-    #
-    #     if cik_iid is None:
-    #         pass
 
 
 if __name__ == '__main__':
