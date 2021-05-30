@@ -181,12 +181,15 @@ class _Factors(deque):
                           as_alias: (list, tuple, str) = None, conds='1', cik_dt_format: str = 'datetime', ):
         # todo add factor via factortable
         if isinstance(factor_table, __MetaFactorTable__):
-            for f in factor_table._factors.show_factors(reduced=True, to_df=False):
+            for f in factor_table._factors.show_factors(reduced=True, to_df=False):  # get one factorInfo
                 origin_factor_names = f.origin_factor_names.split(',')
                 alias_factor_names = f.alias.split(',')
-                for o_f, alias_f in zip(origin_factor_names, alias_factor_names):
+                for o_f, alias_f in zip(origin_factor_names, alias_factor_names):  # mapping factor and its alias
                     if o_f in factor_names or alias_f in factor_names:
+                        # if required factor name at factor or alias, will yield this factorinfo and break this loop
                         yield f
+                        # todo optimize the add factor via ft process!!
+                        # todo if get multifactors, need get required factors only rather than the whole factorinfo
                         break
 
             # raise NotImplementedError('not supported')
