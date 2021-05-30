@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 from ClickSQL.clickhouse.ClickHouseCreate import TableEngineCreator, ClickHouseTableExistsError
 
-from test import conn
+from test.conn import conn
 
 
 class MyTestCase(unittest.TestCase):
@@ -59,7 +59,7 @@ class MyTestCase(unittest.TestCase):
                         extra_format_dict=None, check=False,
                         partition_by_cols=None, execute=False)
 
-        res = 'CREATE TABLE IF NOT EXISTS test.test5  ( test1 Float64,test2 Float64 ) ENGINE = ReplacingMergeTree   ORDER BY  test1         SETTINGS index_granularity = 8192  '
+        res = 'CREATE TABLE IF NOT EXISTS test.test5  ( `test1` Float64,`test2` Float64 ) ENGINE = ReplacingMergeTree   ORDER BY  test1         SETTINGS index_granularity = 8192  '
         # print(out)
         self.assertEqual(out, res)
 
@@ -76,7 +76,7 @@ class MyTestCase(unittest.TestCase):
                         extra_format_dict=None, check=False,
                         partition_by_cols=None, execute=False)
 
-        res = 'CREATE TABLE IF NOT EXISTS test.test5  ( test1 Float64,test2 Float64 ) ENGINE = ReplacingMergeTree  ORDER BY  test1       SETTINGS index_granularity = 8192'
+        res = 'CREATE TABLE IF NOT EXISTS test.test5  ( `test1` Float64,`test2` Float64 ) ENGINE = ReplacingMergeTree  ORDER BY  test1       SETTINGS index_granularity = 8192'
         # print(out)
         self.assertEqual(out, res)
 
@@ -93,7 +93,7 @@ class MyTestCase(unittest.TestCase):
                         extra_format_dict=None, check=False,
                         partition_by_cols=None, execute=False)
 
-        res = 'CREATE TABLE IF NOT EXISTS test.test5  ( test1 Float64,test2 Float64 ) ENGINE = ReplacingMergeTree  ORDER BY  test1   PRIMARY KEY  test1      SETTINGS index_granularity = 8192'
+        res = 'CREATE TABLE IF NOT EXISTS test.test5  ( `test1` Float64,`test2` Float64 ) ENGINE = ReplacingMergeTree  ORDER BY  test1   PRIMARY KEY  test1      SETTINGS index_granularity = 8192'
         print(out)
         self.assertEqual(out, res)
 
@@ -110,7 +110,7 @@ class MyTestCase(unittest.TestCase):
                         extra_format_dict=None, check=False,
                         partition_by_cols=None, execute=False)
 
-        res = 'CREATE TABLE IF NOT EXISTS test.test5  ( test1 Float64,test2 Float64 ) ENGINE = ReplacingMergeTree   ORDER BY  test1   PRIMARY KEY   test1        SETTINGS index_granularity = 8192  '
+        res = 'CREATE TABLE IF NOT EXISTS test.test5  ( `test1` Float64,`test2` Float64 ) ENGINE = ReplacingMergeTree   ORDER BY  test1   PRIMARY KEY   test1        SETTINGS index_granularity = 8192  '
         # print(out)
         self.assertEqual(out, res)
 
@@ -127,7 +127,7 @@ class MyTestCase(unittest.TestCase):
                         extra_format_dict=None, check=False,
                         partition_by_cols=None, execute=False)
 
-        res = 'CREATE TABLE IF NOT EXISTS test.test5  ( test1 Float64,test2 Float64 ) ENGINE = ReplacingMergeTree  ORDER BY  test1   PRIMARY KEY  test1      SETTINGS index_granularity = 8192'
+        res = 'CREATE TABLE IF NOT EXISTS test.test5  ( `test1` Float64,`test2` Float64 ) ENGINE = ReplacingMergeTree  ORDER BY  test1   PRIMARY KEY  test1      SETTINGS index_granularity = 8192'
         print(out)
         self.assertEqual(out, res)
 
@@ -144,7 +144,7 @@ class MyTestCase(unittest.TestCase):
                         extra_format_dict=None, check=False,
                         partition_by_cols=['toString(test1)'], execute=False)
 
-        res = 'CREATE TABLE IF NOT EXISTS test.test5  ( test1 Float64,test2 Float64 ) ENGINE = ReplacingMergeTree PARTITION BY  toString(test1)   ORDER BY  test1   PRIMARY KEY  test1      SETTINGS index_granularity = 8192'
+        res = 'CREATE TABLE IF NOT EXISTS test.test5  ( `test1` Float64,`test2` Float64 ) ENGINE = ReplacingMergeTree PARTITION BY  toString(test1)   ORDER BY  test1   PRIMARY KEY  test1      SETTINGS index_granularity = 8192'
         print(out)
         self.assertEqual(out, res)
 
@@ -162,7 +162,7 @@ class MyTestCase(unittest.TestCase):
                         limit_by=None,
                         limit=None)
 
-        res = 'SELECT test1 FROM test.test'
+        res = 'SELECT test1 FROM test.test            SETTINGS joined_subquery_requires_alias=0'
         # print(out)
         self.assertEqual(out.strip(), res.strip())
 
@@ -181,7 +181,7 @@ class MyTestCase(unittest.TestCase):
                         limit_by=None,
                         limit=None)
 
-        res = 'SELECT test1 FROM test.test           '
+        res = 'SELECT test1 FROM test.test            SETTINGS joined_subquery_requires_alias=0'
         # print(out)
         self.assertEqual(out.strip(), res.strip())
 
@@ -199,7 +199,7 @@ class MyTestCase(unittest.TestCase):
                         limit_by=None,
                         limit=None)
 
-        res = 'SELECT g FROM test.test  ARRAY JOIN test1 as g'
+        res = 'SELECT g FROM test.test  ARRAY JOIN test1 as g          SETTINGS joined_subquery_requires_alias=0'
         # print(out)
         self.assertEqual(out.strip(), res.strip())
 

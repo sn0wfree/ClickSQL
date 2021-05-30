@@ -2,7 +2,7 @@
 import unittest
 
 from ClickSQL import ClickHouseTableNodeExt
-from test import conn
+from test.conn import conn
 
 
 class MyTestCaseClickHouseExt(unittest.TestCase):

@@ -1,8 +1,10 @@
 # coding=utf-8
 
-from ClickSQL.nodes.base import BaseSingleQueryBaseNode
 from collections import namedtuple, deque, Callable
+
 import pandas as pd
+
+from ClickSQL.nodes.base import BaseSingleQueryBaseNode
 
 CIK = namedtuple('CoreIndexKeys', ('dts', 'iid'))
 CIKDATA = namedtuple('CoreIndexKeys', ('dts', 'iid'))
@@ -311,7 +313,7 @@ class __FactorTable__(__MetaFactorTable__):
         else:
             self._checked = True
 
-    def setup_cik(self, cik_dt_col: str, cik_iid_col: str):
+    def _setup_cik(self, cik_dt_col: str, cik_iid_col: str):
         """
         设置 cik 列名
         :param cik_dt_col:
@@ -370,8 +372,6 @@ class __FactorTable__(__MetaFactorTable__):
 
         result = pd.concat(fetched, axis=1)
         columns = result.columns.tolist()
-
-
 
         return result
 

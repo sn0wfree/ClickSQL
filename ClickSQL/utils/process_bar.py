@@ -33,9 +33,11 @@ def process_bar(iterable_obj, counts=None):
     for count, i in enumerate(iterable_obj):
         f = time.time()
         yield i
-
         progress_test(count, counts, time.time() - f)
 
 
 if __name__ == '__main__':
+    s = range(1000)
+    for si in process_bar(s):
+        pass
     pass

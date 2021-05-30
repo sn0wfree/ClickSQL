@@ -65,7 +65,7 @@ class ClickHouseHelper(object):
         describe_table = describe_table[~describe_table['default_type'].isin(['MATERIALIZED', 'ALIAS'])]
         non_nullable_columns = list(describe_table[~describe_table['type'].str.startswith('Nullable')]['name'])
         integer_columns = list(describe_table[describe_table['type'].str.contains('Int', regex=False)]['name'])
-        print(pd.get_versions())
+
         if auto_convert:
             df = df.convert_dtypes()
         missing_in_df = {i: np.where(df[i].isnull(), 1, 0).sum() for i in non_nullable_columns}
