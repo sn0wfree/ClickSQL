@@ -5,8 +5,6 @@ from ClickSQL.nodes.base import BaseSingleFactorTableNode
 from test.conn import conn
 
 
-
-
 class MyTestCaseDelayTasks(unittest.TestCase):
     def test_DelayTasks(self):
         FT = BaseSingleFactorTableNode(conn)

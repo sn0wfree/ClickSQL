@@ -1,5 +1,6 @@
 # coding=utf-8
 
+import warnings
 from collections import namedtuple, deque, Callable
 
 import pandas as pd
@@ -99,8 +100,8 @@ class _Factors(deque):
                                                    as_alias=as_alias, conds=conds, cik_dt_format=cik_dt_format)
         elif isinstance(db_table, pd.DataFrame):
 
-            cls.add_factor_via_df(db_table, factor_names, cik_dt=cik_dt, cik_iid=cik_iid,
-                                  as_alias=as_alias, conds=conds, cik_dt_format=cik_dt_format)
+            return cls.add_factor_via_df(db_table, factor_names, cik_dt=cik_dt, cik_iid=cik_iid,
+                                         as_alias=as_alias, conds=conds, cik_dt_format=cik_dt_format)
 
         elif isinstance(db_table, __MetaFactorTable__):
             return list(cls.add_factor_via_ft(db_table, factor_names, cik_dt=cik_dt, cik_iid=cik_iid,
@@ -170,9 +171,35 @@ class _Factors(deque):
                                        cik_iid=cik_iid, as_alias=as_alias, conds=conds)
 
     @classmethod
-    def add_factor_via_df(cls, *args, **kwargs):
-        # todo add factor via dataframe
-        raise NotImplementedError('not supported')
+    def add_factor_via_df(cls, factor_df: pd.DataFrame, factor_names: (list, tuple), cik_dt='cik_dt',
+                          cik_iid='cik_iid',
+                          as_alias: (list, tuple, str) = None, conds='1', cik_dt_format: str = 'datetime', **kwargs):
+        factor_names = FactorCheckHelper.generate_factor_names(factor_names)
+        alias = FactorCheckHelper.generate_alias(factor_names, as_alias=as_alias)
+        if isinstance(factor_df, pd.DataFrame):  # todo add factor via dataframe
+            # check cik_dt or cik_iid exists
+            factor_df = factor_df.reset_index()
+            exists_cols = factor_df.columns.tolist()
+            if cik_dt not in exists_cols:
+                raise ValueError(f'cannot local {cik_dt} column! please check cik_dt parameter is correct!')
+            if cik_iid not in exists_cols:
+                raise ValueError(f'cannot local {cik_iid} column! please check cik_iid parameter is correct!')
+
+            for f in factor_names:
+                if f not in exists_cols:
+                    raise ValueError(f'cannot local {f} column! please check factor_names parameter is correct!')
+
+            sql = ''
+            via = 'pd.DataFrame'
+
+            res = FactorInfo(factor_df, cik_dt, cik_iid, ','.join(map(str, factor_names)),
+                             ','.join(map(str, alias)), sql, via, conds)  #
+            return res
+
+        else:
+
+            raise NotImplementedError(
+                f'factor_df only accept pd.DataFrame,but got {type(factor_df)}. its type is not supported!')
         pass
 
     @classmethod
@@ -202,8 +229,9 @@ class _Factors(deque):
             # ('db_table', 'dts', 'iid', 'origin_factor_names', 'alias', 'sql','via', 'conditions')
             # ['db_table', 'dts', 'iid', 'conditions']
             cols = list(FactorInfo._fields[:3]) + list(FactorInfo._fields[-2:])
-
-            f = pd.DataFrame(list(self), columns=FactorInfo._fields)
+            no_df_f = list(filter(lambda x: x.via != 'pd.DataFrame', self))
+            df_f = list(filter(lambda x: x.via == 'pd.DataFrame', self))
+            f = pd.DataFrame(no_df_f, columns=FactorInfo._fields)
             factor_name_col = FactorInfo._fields[3]
             alias_col = FactorInfo._fields[4]
 
@@ -211,13 +239,22 @@ class _Factors(deque):
             # can_merged_index = can_merged_index[can_merged_index['sql']]
             # can_merged_index = fgroupby.count().index
             factors = []
+            factors.extend(df_f)  # dataframe have not reduced!
+            # no_df_f = f[no_df_mask]
             for (db_table, dts, iid, via, conditions), df in f.groupby(cols):
                 # masks = (f['db_table'] == db_table) & (f['dts'] == dts) & (f['iid'] == iid) & (
                 #         f['conditions'] == conditions)
                 cc = df[[factor_name_col, alias_col]].apply(lambda x: ','.join(x))
+
                 origin_factor_names = cc[factor_name_col].split(',')
                 alias = cc[alias_col].split(',')
-                origin_factor_names_new, alias_new = zip(*list(set(zip(origin_factor_names, alias))))
+                # use set will disrupt the order
+                # we need keep the origin order
+                back = list(zip(origin_factor_names, alias))
+                disrupted = list(set(back))
+                disrupted.sort(key=back.index)
+
+                origin_factor_names_new, alias_new = zip(*disrupted)
                 alias_new = list(map(lambda x: x if x != 'None' else None, alias_new))
 
                 # cik_dt, cik_iid = self.check_cik_dt(cik_dt=dts, default_cik_dt=self._cik.dts), self.check_cik_iid(
@@ -233,42 +270,96 @@ class _Factors(deque):
         else:
             return factors
 
-    def _generate_fetch_sql_iter(self, filter_cond_dts, filter_cond_ids, reduced=True, add_limit=False):
-        factors = self.show_factors(reduced=reduced, to_df=False)
+    @staticmethod
+    def _generate_fetch_sql_iter(factors, filter_cond_dts, filter_cond_ids, reduced=True, add_limit=False, **kwargs):
+
         # sql_list = []
         if add_limit:
             limit_str = 'limit 100'
         else:
             limit_str = ''
         ## todo 可能存在性能点
-        for db_table, dts, iid, origin_factor_names, alias, sql, via, conditions in factors:
+        no_df_factors_list = filter(lambda x: x.via != 'pd.DataFrame', factors)
+
+        for db_table, dts, iid, origin_factor_names, alias, sql, via, conditions in no_df_factors_list:
             sql2 = f"select * from ({sql}) where {filter_cond_dts} and {filter_cond_ids} {limit_str} "
             yield sql2
 
-    def fetch_iter(self, query, filter_cond_dts, filter_cond__ids, reduced=True, add_limit=False, to_sql=False):
+    def _fetch_sql_part(self, query, factors, filter_cond_dts, filter_cond__ids, reduced=True, add_limit=False,
+                        to_sql=False):
         if not isinstance(query, Callable):
             raise ValueError('query must database connector with __call__')
-        sql_list_iter = self._generate_fetch_sql_iter(filter_cond_dts, filter_cond__ids, reduced=reduced,
+        sql_list_iter = self._generate_fetch_sql_iter(factors, filter_cond_dts, filter_cond__ids, reduced=reduced,
                                                       add_limit=add_limit)
-
         if to_sql:
             for sql2 in sql_list_iter:
                 yield sql2
         else:
-
             for sql2 in sql_list_iter:
                 df = query(sql2)
-                ## remove smartdataframe
-
+                # remove smartdataframe
                 res = pd.DataFrame(df).set_index(['cik_dt', 'cik_iid'])
 
                 # ['db_table', 'dts', 'iid', 'origin_factor_names', 'alias', 'sql', 'conditions']
                 yield res
 
+    @staticmethod
+    def _fetch_df_part(df_factors, filter_cond_dts, filter_cond__ids, reduced=True, add_limit=False,
+                       to_sql=False):
+
+        for db_table, dts, iid, origin_factor_names, alias, sql, via, conditions in df_factors:
+            origin_factor_names = origin_factor_names.split(',')
+            alias = alias.split(',')
+            c = {o: a for o, a in zip(origin_factor_names, alias) if a != 'None'}
+            if len(c) == 0:
+                pass
+            else:
+                db_table = db_table.rename(columns=c)
+            yield db_table.set_index(['cik_dt', 'cik_iid'])
+
+    def fetch_iter(self, query, filter_cond_dts, filter_cond__ids, reduced=True, add_limit=False, to_sql=False):
+        if not isinstance(query, Callable):
+            raise ValueError('query must database connector with __call__')
+        factors = self.show_factors(reduced=reduced, to_df=False)
+        sql_factors = list(filter(lambda x: x.via != 'pd.DataFrame', factors))
+        res_iter = self._fetch_sql_part(query, sql_factors, filter_cond_dts, filter_cond__ids, reduced=reduced,
+                                        add_limit=add_limit, to_sql=to_sql)
+
+        # mask = factors['via'] == 'pd.DataFrame'
+        # df_factors = factors[mask]
+        df_factors_list = list(filter(lambda x: x.via == 'pd.DataFrame', factors))
+        # for result in res_iter:
+        #     yield result
+        # if to_sql:
+        #     if len(df_factors_list) != 0:
+        #         # warning dataframe mode
+        #         warnings.warn('factors have at least one pd.DataFrame data,which will ingore at to_sql=True mode!!!')
+        # else:
+        #     if len(df_factors_list) != 0:
+        #         for db_table, dts, iid, origin_factor_names, alias, sql, via, conditions in df_factors_list:
+        #             origin_factor_names = origin_factor_names.split(',')
+        #             alias = alias.split(',')
+        #             c = {o: a for o, a in zip(origin_factor_names, alias) if a != 'None'}
+        #             db_table.rename(columns=c)
+        #             yield db_table
+        for s in res_iter:
+            yield s
+        if to_sql:
+            if len(df_factors_list) != 0:
+                # warning dataframe mode
+                warnings.warn('factors have at least one pd.DataFrame data,which will ignore at to_sql=True mode!!!')
+        else:
+            if len(df_factors_list) != 0:
+                df_factor_res = self._fetch_df_part(df_factors_list, filter_cond_dts, filter_cond__ids, reduced=reduced,
+                                                    add_limit=add_limit, to_sql=to_sql)
+                for df_f in df_factor_res:
+                    yield df_f
+
     def fetch_all(self, query, filter_cond_dts, filter_cond__ids, reduced=True, add_limit=False, to_sql=False):
         if not isinstance(query, Callable):
             raise ValueError('query must database connector with __call__')
-        sql_list_iter = self._generate_fetch_sql_iter(filter_cond_dts, filter_cond__ids, reduced=reduced,
+        factors = self.show_factors(reduced=reduced, to_df=False)
+        sql_list_iter = self._generate_fetch_sql_iter(factors, filter_cond_dts, filter_cond__ids, reduced=reduced,
                                                       add_limit=add_limit)
 
         from functools import reduce
@@ -296,8 +387,8 @@ class __FactorTable__(__MetaFactorTable__):
         # super(FatctorTable, self).__init__(*args, **kwargs)
         self._node = BaseSingleQueryBaseNode(*args, **kwargs)
 
-        cik_dt = None if 'cik_dt' not in kwargs.keys() else kwargs['cik_dt']
-        cik_iid = None if 'cik_iid' not in kwargs.keys() else kwargs['cik_iid']
+        cik_dt = 'cik_dt' if 'cik_dt' not in kwargs.keys() else kwargs['cik_dt']  # default use cik_dt as cik_dt
+        cik_iid = 'cik_iid' if 'cik_iid' not in kwargs.keys() else kwargs['cik_iid']  # default use cik_iid as cik_iid
         self._cik = CIK(cik_dt, cik_iid)
         self._cik_data = None
         self._checked = False
@@ -363,18 +454,33 @@ class __FactorTable__(__MetaFactorTable__):
 
         return self.fetch(reduced=reduced, add_limit=True)
 
-    def fetch(self, reduced=True, add_limit=False):
-        if self._strict_cik:
-            if self._cik_dts is None:
-                raise KeyError('cik_dts is not setup!')
-            if self._cik_iids is None:
-                raise KeyError('cik_iids is not setup!')
+    def fetch(self, _cik_dts=None, _cik_iids=None, reduced=True, add_limit=False, ):
+        """
+
+        :param reduced: whether use reduce form
+        :param _cik_dts: set up dts
+        :param _cik_iids:  set up iids
+        :param add_limit: use force limit columns
+        :return:
+        """
+        if not add_limit:
+            if _cik_dts is not None:
+                self._cik_dts = _cik_dts
+            else:
+                if self._cik_dts is None:
+                    raise KeyError('cik_dts(either default approach or fetch) both are not setup!')
+
+            if _cik_iids is not None:
+                self._cik_iids = _cik_iids
+            else:
+                if self._cik_iids is None:
+                    raise KeyError('cik_iids(either default approach or fetch) both are not setup!')
 
         fetched = self._factors.fetch_iter(self._node, self.cik_dt, self.cik_iid, reduced=reduced,
                                            add_limit=add_limit)
 
         result = pd.concat(fetched, axis=1)
-        columns = result.columns.tolist()
+        # columns = result.columns.tolist()
 
         return result
 
