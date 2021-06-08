@@ -385,6 +385,7 @@ class __FactorTable__(__MetaFactorTable__):
 
     def __init__(self, *args, **kwargs):
         # super(FatctorTable, self).__init__(*args, **kwargs)
+        ## TODO _node 改成适配器模式，而不是写死的
         self._node = BaseSingleQueryBaseNode(*args, **kwargs)
 
         cik_dt = 'cik_dt' if 'cik_dt' not in kwargs.keys() else kwargs['cik_dt']  # default use cik_dt as cik_dt
