@@ -2,7 +2,7 @@
 import unittest
 import pandas as pd
 import numpy as np
-from ClickSQL.factor_test.prepare import detect_series_na
+from ClickSQL.factor_test.factor_tools import detect_series_na
 
 
 def generate_random_data(size=(100, 2), add_na=0):
