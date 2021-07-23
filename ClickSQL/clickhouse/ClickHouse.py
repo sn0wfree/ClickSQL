@@ -13,7 +13,7 @@ import requests
 
 from ClickSQL.conf import Config
 from ClickSQL.errors import ParameterKeyError, ParameterTypeError, DatabaseTypeError, DatabaseError, \
-    HeartbeatCheckFailure, ClickHouseTableNotExistsError,ServerError
+    HeartbeatCheckFailure, ClickHouseTableNotExistsError, ServerError
 from ClickSQL.utils import cached_property, file_cache, parse_rfc1738_args
 
 """
@@ -25,7 +25,6 @@ clickhouse-server
 if Config.get('ENGAGE_ASYNC', default=False):
     try:
         import nest_asyncio
-
         nest_asyncio.apply()  # allow run at jupyter and asyncio env
         ENGAGE_ASYNC = True
         from aiohttp import ClientSession
@@ -52,7 +51,6 @@ DEFAULT_CONNECT_SETTINGS = {'enable_http_compression': 1, 'send_progress_in_http
                             'wait_end_of_query': 0}
 
 
-# TODO change to queue mode change remove aiohttp depends
 class ClickHouseHelper(object):
     @staticmethod
     def _check_df_and_dump(df: pd.DataFrame, describe_table: pd.DataFrame, auto_convert=True):

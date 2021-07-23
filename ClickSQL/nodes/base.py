@@ -1,8 +1,6 @@
 # coding=utf-8
-import copy
 import warnings
-from collections import namedtuple, deque
-
+from collections import deque
 from functools import wraps
 
 from ClickSQL.clickhouse.ClickHouseExt import ClickHouseTableNodeExt
@@ -11,41 +9,20 @@ from ClickSQL.nodes.groupby import GroupSQLUtils
 from ClickSQL.nodes.merge import MergeSQLUtils
 
 complex_sql_select_count = 4
-factor_parameters = ('dt', 'code', 'value', 'fid')
-ft_node = namedtuple('factortable', factor_parameters)
-
-# class FactorBackendCH(object):
-#     __slots__ = ['_src', 'node', 'db_table']
-#
-#     def __init__(self, src: str):
-#         """
-#
-#         :param src:  sample: clickhouse://test:sysy@199.199.199.199:1234/drre
-#         """
-#         self._src = src
-#         self.node = ClickHouseTableNodeExt(conn_str=src)
-#         self.db_table = self.node._para.database
-#
-#     def __call__(self, sql: str, **kwargs):
-#         return self.node.query(sql, **kwargs)
-
+# factor_parameters = ('dt', 'code', 'value', 'fid')
+# ft_node = namedtuple('factortable', factor_parameters)
 
 "add auto-increment col by materialized bitOr(bitShiftLeft(toUInt64(now64()),24), rowNumberInAllBlocks()) "
 
 
 class DelayTasks(deque):
-    def __init__(self,_query, *args, **kwargs):
+    def __init__(self, _query, *args, **kwargs):
         super(DelayTasks, self).__init__(*args, **kwargs)
-
         self._query = _query
 
     def run(self, no_yield=False):
         result = (self._query(sql) for sql in self)
-        if no_yield:
-            return list(result)
-
-        else:
-            return result
+        return list(result) if no_yield else result
 
 
 class BaseSingleQueryBaseNode(object):
@@ -57,7 +34,7 @@ class BaseSingleQueryBaseNode(object):
     __Name__ = "基础因子库单因子基类"
     __slots__ = (
         'operator', 'db', 'table', 'db_table', '_kwargs', '_raw_kwargs', 'status', '_INFO', 'depend_tables',
-        '_fid_ck', '_dt_max_1st', '_execute', '_no_self_update', 'delay_tasks'
+        '_fid_ck', '_dt_max_1st', '_execute', '_no_self_update', 'delay_tasks', 'src'
     )
 
     def __init__(self, src: str, db_table: (None, str) = None, info=None, **kwargs):
@@ -79,30 +56,17 @@ class BaseSingleQueryBaseNode(object):
         """
 
         self.operator = ClickHouseTableNodeExt(src)
-
-        # self._execute = self._operator._execute
-
-        if db_table is None:
+        if db_table is None:  # if not set db_table will find db_table from src
             src_db_table = self.operator.db_table
-            db_table_all, db, table = self._db_split(src_db_table)
-            # if '.' in src_db_table:
-            #     self.db_table = src_db_table
-            # else:
-            #     raise ValueError('db_table parameter get wrong type!')
+            self.db_table, self.db, self.table = self._db_split(src_db_table)
         elif isinstance(db_table, str):
-            db_table_all, db, table = self._db_split(db_table)
+            self.db_table, self.db, self.table = self._db_split(db_table)
         else:
             raise ValueError('db_table only accept str!')
-        self.db_table = db_table_all
-        # db, table = self.db_table.split('.')
-        self.db = db
-        self.table = table
-        # self.depend_tables = [self.db_table]
-        self._kwargs = kwargs
-        self._raw_kwargs = kwargs
+        self.src = src
+        self._kwargs = self._raw_kwargs = kwargs
         self.status = 'SQL'
         self._INFO = info
-
         self.delay_tasks = DelayTasks(self.operator)
         # self.delay_tasks._query = self.operator
 
@@ -465,88 +429,21 @@ class BaseSingleQueryBaseNode(object):
     #     return sql, update_status
 
 
-# class BaseSingleFactorNode(BaseSingleFactorBaseNode):
-#     __slots__ = (
-#         'operator', 'db', 'table', 'db_table', '_kwargs', '_raw_kwargs', 'status', '_INFO', 'depend_tables',
-#         '_fid_ck', '_dt_max_1st', '_execute', '_no_self_update'
-#     )
-#
-#     def __init__(self, *args, **kwargs):
-#         super(BaseSingleFactorNode, self).__init__(*args, **kwargs)
-
-
-# class UpdateSQLUtils(object):
-#
-#     @staticmethod
-#     def full_update(src_db_table: BaseSingleQueryBaseNode, dst_db_table: BaseSingleQueryBaseNode, **kwargs):
-#         # dst_db_table = dst_db_table.db_table
-#         # dst_db, dst_table = dst_db_table.db, dst_db_table.table
-#         dst_table_type = dst_db_table.table_engine
-#         dst = dst_db_table.db_table
-#         if dst_table_type == 'View':
-#             raise ValueError(f'{dst} is View ! cannot be updated!')
-#         insert_sql = f"insert into {dst} {src_db_table}"
-#         return insert_sql
-#
-#     @staticmethod
-#     def incremental_update(src_db_table: BaseSingleQueryBaseNode, dst_db_table: BaseSingleQueryBaseNode,
-#                            fid_ck: str, dt_max_1st=True, inplace=False, **kwargs):
-#         # src_db_table = src_table.db_table
-#         # src_table_type = src_db_table.table_engine
-#         dst_table_type = dst_db_table.table_engine
-#         dst = dst_db_table.db_table
-#         if dst_table_type == 'View':
-#             raise ValueError(f'{dst} is View ! cannot be updated!')
-#         if dt_max_1st:
-#             order_asc = ' desc'
-#         else:
-#             order_asc = ' asc'
-#         sql = f" select distinct {fid_ck} from {dst} order by {fid_ck} {order_asc} limit 1 "
-#         fid_ck_values = src_db_table.operator(sql).values.ravel().tolist()[0]
-#         if inplace:
-#             src_db_table._update(**{f'{fid_ck} as src_{fid_ck}': f' {fid_ck} > {fid_ck_values}'})
-#             insert_sql = f"insert into {dst} {src_db_table}"
-#         else:
-#             src_db_table_copy = copy.deepcopy(src_db_table)
-#             src_db_table_copy._update(**{f'{fid_ck} as src_{fid_ck}': f' {fid_ck} > {fid_ck_values}'})
-#             insert_sql = f"insert into {dst} {src_db_table_copy}"
-#
-#         return insert_sql
-
-
 class BaseSingleFactorTableNode(BaseSingleQueryBaseNode):
     __slots__ = (
         'operator', 'db', 'table', 'db_table', '_kwargs', '_raw_kwargs', 'status', '_INFO', 'depend_tables',
-        # '_fid_ck', '_dt_max_1st',
-        '_execute', '_no_self_update', '_complex'
+        '_execute', '_no_self_update', '_complex', 'src'
     )
 
-    def __init__(self, src: str, db_table: (None, str) = None, info=None,
-                 # fid_ck: str = 'fid', dt_max_1st: bool = True,
-                 execute: bool = False,
-                 # no_self_update: bool = True,
+    def __init__(self, src: str, db_table: (None, str) = None, info=None, execute: bool = False,
                  **kwargs):
         super(BaseSingleFactorTableNode, self).__init__(src, db_table=db_table, info=info, **kwargs)
+
         self._complex = False
-        # self._fid_ck = fid_ck
-        # self._dt_max_1st = dt_max_1st
         self._execute = execute
-        # self._no_self_update = no_self_update
-
-    # def execute(self, sql):
-    #     ## add execute usage
-    #     return self.operator(sql)
-    #
-    # def drop_table(self, target: str):
-    #     if '.' not in target:
-    #         raise ValueError('drop table must tell correspond database')
-    #     self.operator(f'drop table if exists {target}')
-    #
-    # def drop_db(self, target: str):
-    #     self.operator(f'drop database if exists {target}')
 
 
-## https://zhuanlan.zhihu.com/p/297623539
+# https://zhuanlan.zhihu.com/p/297623539
 
 
 if __name__ == '__main__':
