@@ -2,7 +2,7 @@
 import warnings
 from collections import deque
 from functools import wraps
-
+from ClickSQL.pool.pooled_ch import PooledClickHouseTableNodeExt
 from ClickSQL.clickhouse.ClickHouseExt import ClickHouseTableNodeExt
 from ClickSQL.errors import ClickHouseTableNotExistsError
 from ClickSQL.nodes.groupby import GroupSQLUtils
@@ -37,7 +37,7 @@ class BaseSingleQueryBaseNode(object):
         '_fid_ck', '_dt_max_1st', '_execute', '_no_self_update', 'delay_tasks', 'src'
     )
 
-    def __init__(self, src: str, db_table: (None, str) = None, info=None, **kwargs):
+    def __init__(self, src: str, db_table: (None, str) = None, info=None, pool=False, **kwargs):
         """
 
         :type kwargs: object
@@ -54,8 +54,10 @@ class BaseSingleQueryBaseNode(object):
 
 
         """
-
-        self.operator = ClickHouseTableNodeExt(src)
+        if pool:
+            self.operator = PooledClickHouseTableNodeExt(src)
+        else:
+            self.operator = ClickHouseTableNodeExt(src)
         if db_table is None:  # if not set db_table will find db_table from src
             src_db_table = self.operator.db_table
             self.db_table, self.db, self.table = self._db_split(src_db_table)
@@ -435,9 +437,9 @@ class BaseSingleFactorTableNode(BaseSingleQueryBaseNode):
         '_execute', '_no_self_update', '_complex', 'src'
     )
 
-    def __init__(self, src: str, db_table: (None, str) = None, info=None, execute: bool = False,
+    def __init__(self, src: str, db_table: (None, str) = None, info=None, execute: bool = False, pool=False,
                  **kwargs):
-        super(BaseSingleFactorTableNode, self).__init__(src, db_table=db_table, info=info, **kwargs)
+        super(BaseSingleFactorTableNode, self).__init__(src, db_table=db_table, info=info, pool=pool, **kwargs)
 
         self._complex = False
         self._execute = execute
