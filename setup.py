@@ -25,8 +25,8 @@ setup(
     name="ClickSQL",
     version=__version__,
     # python_requires='>=3.6',  # python环境
-    keywords=("ClickSQL", "Databases"),
-    description="SQL programming",
+    keywords=("ClickHouse", "Databases", "SQL", 'Python', 'Client'),
+    description="A python client for Clickhouse",
     long_description=read_file('README.md'),
     long_description_content_type="text/markdown",  # 新参数
     license="MIT Licence",
