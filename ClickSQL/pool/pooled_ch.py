@@ -3,7 +3,6 @@ import gzip
 import warnings
 from functools import partial
 from urllib import parse
-
 from urllib3.poolmanager import PoolManager
 
 from ClickSQL.clickhouse.ClickHouse import GLOBAL_RAISE_ERROR
