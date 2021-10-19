@@ -201,8 +201,9 @@ class ClickHouseBaseNode(ClickHouseHelper):
                                                                           host=self._para.host,
                                                                           port=self._para.port)
         self.http_settings = self._merge_settings(None, updated_settings=DEFAULT_CONNECT_SETTINGS,
-                                                  extra_settings={'user': self._para.user,
-                                                                  'password': self._para.password})
+                                                  # extra_settings={'user': self._para.user,
+                                                  #                 'password': self._para.password}
+                                                  )
         _base_url = "http://{host}:{port}/?".format(host=self._para.host, port=int(self._para.port))
         self.__heartbeat_test__(_base_url)
         self._heartbeat_test_ = partialmethod(self.__heartbeat_test__, _base_url=_base_url)
