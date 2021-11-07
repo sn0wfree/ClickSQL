@@ -1,1 +1,1 @@
-conn = 'clickhouse://default:Imsn0wfree@47.104.186.157:8123/test.test'
+conn = 'clickhouse://default:Imsn0wfree@45.76.43.238:8123/system'
