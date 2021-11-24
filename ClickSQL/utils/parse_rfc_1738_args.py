@@ -3,7 +3,6 @@ import re
 from typing import Any, Union
 from urllib.parse import unquote
 
-
 class ArgumentError(Exception):
     """Raised when an invalid or conflicting function argument is supplied.
 

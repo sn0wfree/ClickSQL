@@ -73,7 +73,7 @@ class ClickHouseHelper(object):
                 raise ValueError('"{0}" is not a nullable column, missing values are not allowed.'.format(i))
 
         df_columns = df.columns.tolist()
-        each_row = df.to_dict(orient='records')
+        each_row = json.loads(df.to_json(orient ='records'))
 
         for row in each_row:
             for col in df_columns:
