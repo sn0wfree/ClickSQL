@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "clicksql": {
+      "command": "python",
+      "args": [
+        "-m", 
+        "ClickSQL.mcp.server"
+      ],
+      "env": {
+        "CLICKHOUSE_CONNECTION": "clickhouse://default:password@localhost:8123/my_database"
+      }
+    }
+  }
+}
